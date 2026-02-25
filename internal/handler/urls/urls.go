@@ -44,5 +44,7 @@ func GetURL(w http.ResponseWriter, r *http.Request) {
 	if redirectTo == "" {
 		w.WriteHeader(500)
 	}
-	http.Redirect(w, r, redirectTo, http.StatusTemporaryRedirect)
+	w.Header().Set("Content-Type", "text/plain")
+	w.Header().Set("Location", redirectTo)
+	w.WriteHeader(http.StatusTemporaryRedirect)
 }
