@@ -32,7 +32,7 @@ func CreateURL(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusCreated)
-	w.Write([]byte(fmt.Sprintf("http://localhost:8080/EWHXdJfB")))
+	w.Write([]byte("http://localhost:8080/EWHXdJfB"))
 
 	defer func(Body io.ReadCloser) {
 		err := Body.Close()
