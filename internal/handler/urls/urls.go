@@ -21,5 +21,6 @@ func GetURL(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		w.Write([]byte("Method not allowed"))
 	}
-	http.Redirect(w, r, "https://practicum.yandex.ru/", http.StatusTemporaryRedirect)
+	w.WriteHeader(http.StatusTemporaryRedirect)
+	w.Header().Set("Location", "https://practicum.yandex.ru/")
 }
