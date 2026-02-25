@@ -23,13 +23,16 @@ func CreateURL(w http.ResponseWriter, r *http.Request) {
 	}
 	var data string
 	err = json.Unmarshal(body, &data)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+	}
 	fmt.Println(data)
 
 	testDB["/EwHXdJfB"] = data
 
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusCreated)
-	w.Write([]byte("http://localhost:8080/EWHXdJfB"))
+	w.Write([]byte(fmt.Sprintf("http://localhost:8080/EWHXdJfB")))
 
 	defer func(Body io.ReadCloser) {
 		err := Body.Close()
@@ -46,6 +49,7 @@ func GetURL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	redirectTo := testDB[r.URL.Path]
+	fmt.Println(redirectTo)
 	if redirectTo == "" {
 		w.WriteHeader(500)
 	}
