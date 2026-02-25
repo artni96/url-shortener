@@ -1,6 +1,8 @@
 package urls
 
 import (
+	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 )
@@ -13,13 +15,17 @@ func CreateURL(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("Method not allowed"))
 		return
 	}
+
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+	var data string
+	err = json.Unmarshal(body, &data)
+	fmt.Println(data)
 
-	testDB["/EwHXdJfB"] = string(body)
+	testDB["/EwHXdJfB"] = data
 
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusCreated)
@@ -28,7 +34,7 @@ func CreateURL(w http.ResponseWriter, r *http.Request) {
 	defer func(Body io.ReadCloser) {
 		err := Body.Close()
 		if err != nil {
-
+			panic(err)
 		}
 	}(r.Body)
 }
@@ -40,7 +46,8 @@ func GetURL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	redirectTo := testDB[r.URL.Path]
-
-	w.Header().Set("Location", redirectTo)
-	w.WriteHeader(http.StatusTemporaryRedirect)
+	if redirectTo == "" {
+		w.WriteHeader(500)
+	}
+	http.Redirect(w, r, redirectTo, http.StatusTemporaryRedirect)
 }
