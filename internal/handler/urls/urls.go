@@ -1,9 +1,7 @@
 package urls
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 )
 
@@ -16,30 +14,23 @@ func CreateURL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+	originalURL := make([]byte, r.ContentLength)
+	_, err := r.Body.Read(originalURL)
+	if err != nil && err.Error() != "EOF" {
+		http.Error(w, "Не получается получить тело запроса", http.StatusBadRequest)
 		return
 	}
-	var data string
-	err = json.Unmarshal(body, &data)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-	}
-	fmt.Println(data)
+	defer r.Body.Close()
 
-	testDB["/EwHXdJfB"] = data
+	urlStr := string(originalURL)
 
+	shortID := "/EwHXdJfB"
+
+	testDB[shortID] = urlStr
+	shortURL := fmt.Sprintf("http://localhost:8080/s%s", shortID)
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusCreated)
-	w.Write([]byte("http://localhost:8080/EWHXdJfB"))
-
-	defer func(Body io.ReadCloser) {
-		err := Body.Close()
-		if err != nil {
-			panic(err)
-		}
-	}(r.Body)
+	w.Write([]byte(shortURL))
 }
 
 func GetURL(w http.ResponseWriter, r *http.Request) {
