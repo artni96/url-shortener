@@ -12,6 +12,7 @@ import (
 
 func CreateURLHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
+		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(fmt.Sprintf("Метод %s запрещен", r.Method)))
 		return
@@ -20,12 +21,19 @@ func CreateURLHandler(w http.ResponseWriter, r *http.Request) {
 	originalURL := make([]byte, r.ContentLength)
 	_, err := r.Body.Read(originalURL)
 	if err != nil && err.Error() != "EOF" {
+		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("Не получается получить тело запроса"))
 		return
 	}
 
 	urlStr := string(originalURL)
+	if urlStr == "" {
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("Пустое тело запроса"))
+		return
+	}
 
 	urlID, err := generateID(10)
 	if err != nil || urlID == "" {
