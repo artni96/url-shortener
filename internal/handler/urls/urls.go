@@ -5,14 +5,15 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/http"
+	"strings"
+
+	"github.com/artni96/url-shortener/internal/config/db"
 )
 
-var testDB = map[string]string{}
-
-func CreateURL(w http.ResponseWriter, r *http.Request) {
+func CreateURLHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Method not allowed"))
+		w.Write([]byte(fmt.Sprintf("Метод %s запрещен", r.Method)))
 		return
 	}
 
@@ -23,30 +24,32 @@ func CreateURL(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("Не получается получить тело запроса"))
 		return
 	}
-	defer r.Body.Close()
 
 	urlStr := string(originalURL)
 
 	urlID, err := generateID(10)
-	if err != nil {
+	if err != nil || urlID == "" {
 		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("Не удалось обработать запрос"))
+		return
 	}
-	urlID = "/" + urlID
-	testDB[urlID] = urlStr
-	shortURL := fmt.Sprintf("http://localhost:8080%s", urlID)
+
+	db.LocalDB[urlID] = urlStr
+	shortURL := fmt.Sprintf("http://localhost:8080/%s", urlID)
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusCreated)
 	w.Write([]byte(shortURL))
+
+	defer r.Body.Close()
 }
 
-func GetURL(w http.ResponseWriter, r *http.Request) {
+func GetURLHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Method not allowed"))
+		w.Write([]byte(fmt.Sprintf("Метод %s запрещен", r.Method)))
 		return
 	}
-	redirectTo := testDB[r.URL.Path]
-	fmt.Println(redirectTo)
+	redirectTo := db.LocalDB[strings.TrimPrefix(r.URL.Path, "/")]
 	if redirectTo == "" {
 		w.WriteHeader(500)
 	}
@@ -61,5 +64,14 @@ func generateID(length int) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return base64.URLEncoding.EncodeToString(bytes)[:length], err
+	resp := base64.URLEncoding.EncodeToString(bytes)[:length]
+
+	// Дополнительная проверка на уникальность сгенерированного ID
+	if _, ok := db.LocalDB[resp]; ok {
+		_, err = rand.Read(bytes)
+		if err != nil {
+			return "", err
+		}
+	}
+	return resp, err
 }
