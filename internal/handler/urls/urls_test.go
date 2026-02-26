@@ -1,6 +1,7 @@
 package urls
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -24,19 +25,37 @@ func TestCreateURLHandler(t *testing.T) {
 		want    want
 	}{
 		{
-			name:    "success",
-			want:    want{status: http.StatusCreated, contentType: "text/plain"},
-			request: request{method: http.MethodPost, body: []byte("https://practicum.yandex.ru/")},
+			name: "success",
+			want: want{
+				status:      http.StatusCreated,
+				contentType: "text/plain",
+			},
+			request: request{
+				method: http.MethodPost,
+				body:   []byte("https://practicum.yandex.ru/"),
+			},
 		},
 		{
-			name:    "wrong method",
-			want:    want{status: http.StatusBadRequest, contentType: "text/plain"},
-			request: request{method: http.MethodGet, body: []byte("https://practicum.yandex.ru/")},
+			name: "wrong method",
+			want: want{
+				status:      http.StatusBadRequest,
+				contentType: "text/plain",
+			},
+			request: request{
+				method: http.MethodGet,
+				body:   []byte("https://practicum.yandex.ru/"),
+			},
 		},
 		{
-			name:    "empty body",
-			want:    want{status: http.StatusBadRequest, contentType: "text/plain"},
-			request: request{method: http.MethodPost, body: []byte{}},
+			name: "empty body",
+			want: want{
+				status:      http.StatusBadRequest,
+				contentType: "text/plain",
+			},
+			request: request{
+				method: http.MethodPost,
+				body:   []byte{},
+			},
 		},
 	}
 	for _, tt := range tests {
@@ -53,46 +72,83 @@ func TestCreateURLHandler(t *testing.T) {
 	}
 }
 
-//func TestGetURLHandler(t *testing.T) {
-//	type args struct {
-//		w http.ResponseWriter
-//		r *http.Request
-//	}
-//	tests := []struct {
-//		name string
-//		args args
-//	}{
-//		// TODO: Add test cases.
-//	}
-//	for _, tt := range tests {
-//		t.Run(tt.name, func(t *testing.T) {
-//			GetURLHandler(tt.args.w, tt.args.r)
-//		})
-//	}
-//}
-//
-//func Test_generateID(t *testing.T) {
-//	type args struct {
-//		length int
-//	}
-//	tests := []struct {
-//		name    string
-//		args    args
-//		want    string
-//		wantErr bool
-//	}{
-//		// TODO: Add test cases.
-//	}
-//	for _, tt := range tests {
-//		t.Run(tt.name, func(t *testing.T) {
-//			got, err := generateID(tt.args.length)
-//			if (err != nil) != tt.wantErr {
-//				t.Errorf("generateID() error = %v, wantErr %v", err, tt.wantErr)
-//				return
-//			}
-//			if got != tt.want {
-//				t.Errorf("generateID() got = %v, want %v", got, tt.want)
-//			}
-//		})
-//	}
-//}
+func TestGetURLHandler(t *testing.T) {
+	type request struct {
+		method string
+		url    string
+	}
+	type requestToCreate struct {
+		url string
+	}
+	type want struct {
+		status      int
+		contentType string
+		redirectTo  string
+	}
+
+	tests := []struct {
+		name    string
+		request request
+		want    want
+	}{
+		{
+			name: "success",
+			request: request{
+				method: http.MethodGet,
+				url:    "/test",
+			},
+			want: want{
+				status:      http.StatusTemporaryRedirect,
+				contentType: "text/plain",
+				redirectTo:  "http://test.com",
+			},
+		},
+		{
+			name: "method not allowed",
+			request: request{
+				method: http.MethodPost,
+				url:    "/test",
+			},
+			want: want{
+				status:      http.StatusBadRequest,
+				contentType: "text/plain",
+				redirectTo:  "http://test.com",
+			},
+		},
+		{
+			name: "not found",
+			request: request{
+				method: http.MethodPost,
+				url:    "/test",
+			},
+			want: want{
+				status:      http.StatusBadRequest,
+				contentType: "text/plain",
+				redirectTo:  "http://test.com",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+
+			reqToCreate := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(tt.want.redirectTo))
+			w := httptest.NewRecorder()
+			CreateURLHandler(w, reqToCreate)
+			shortURL := w.Body.String()
+			if tt.name == "not found" {
+				shortURL = shortURL + "wrong"
+			}
+
+			fmt.Println(shortURL)
+			req := httptest.NewRequest(tt.request.method, shortURL, nil)
+			w = httptest.NewRecorder()
+			GetURLHandler(w, req)
+			res := w.Result()
+			assert.Equal(t, tt.want.status, res.StatusCode)
+			if tt.want.status == http.StatusTemporaryRedirect {
+				assert.Equal(t, tt.want.contentType, res.Header.Get("Content-Type"))
+				assert.Equal(t, tt.want.redirectTo, res.Header.Get("Location"))
+			}
+		})
+	}
+}

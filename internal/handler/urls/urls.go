@@ -59,7 +59,10 @@ func GetURLHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	redirectTo := db.LocalDB[strings.TrimPrefix(r.URL.Path, "/")]
 	if redirectTo == "" {
-		w.WriteHeader(500)
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("Ссылка не найдена"))
+		return
+
 	}
 	w.Header().Set("Content-Type", "text/plain")
 	w.Header().Set("Location", redirectTo)
