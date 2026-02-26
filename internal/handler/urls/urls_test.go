@@ -68,6 +68,7 @@ func TestCreateURLHandler(t *testing.T) {
 			assert.Equal(t, tt.want.status, res.StatusCode)
 			assert.Equal(t, tt.want.contentType, res.Header.Get("Content-Type"))
 			assert.NotEmpty(t, res.Body)
+			defer res.Body.Close()
 		})
 	}
 }
@@ -149,6 +150,7 @@ func TestGetURLHandler(t *testing.T) {
 				assert.Equal(t, tt.want.contentType, res.Header.Get("Content-Type"))
 				assert.Equal(t, tt.want.redirectTo, res.Header.Get("Location"))
 			}
+			defer res.Body.Close()
 		})
 	}
 }
