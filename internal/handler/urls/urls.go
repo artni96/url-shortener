@@ -36,7 +36,7 @@ func CreateURLHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if isURLCorrect(urlStr) == false {
+	if !isURLCorrect(urlStr) {
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("В тело запроса передан некорректный url"))
