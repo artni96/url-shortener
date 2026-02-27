@@ -57,6 +57,17 @@ func TestCreateURLHandler(t *testing.T) {
 				body:   []byte{},
 			},
 		},
+		{
+			name: "invalid url",
+			want: want{
+				status:      http.StatusBadRequest,
+				contentType: "text/plain",
+			},
+			request: request{
+				method: http.MethodPost,
+				body:   []byte("practicum.yandex.ru/"),
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/artni96/url-shortener/internal/config/db"
@@ -32,6 +33,13 @@ func CreateURLHandler(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("Пустое тело запроса"))
+		return
+	}
+
+	if isURLCorrect(urlStr) == false {
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("В тело запроса передан некорректный url"))
 		return
 	}
 
@@ -85,4 +93,15 @@ func generateID(length int) (string, error) {
 		}
 	}
 	return resp, err
+}
+
+func isURLCorrect(url string) bool {
+	matched, err := regexp.MatchString(`^https?:\/\/`, url)
+	if err != nil {
+		return false
+	}
+	if matched {
+		return true
+	}
+	return false
 }
