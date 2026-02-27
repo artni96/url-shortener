@@ -7,10 +7,10 @@ import (
 )
 
 func main() {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", urls.CreateURLHandler)
-	mux.HandleFunc("/{id}", urls.GetURLHandler)
-	err := http.ListenAndServe(":8080", mux)
+	//mux := http.NewServeMux()
+	//mux.HandleFunc("/", urls.CreateURLHandler)
+	//mux.HandleFunc("/{id}", urls.GetURLHandler)
+	err := http.ListenAndServe(":8080", urls.URLRouter())
 	if err != nil {
 		panic(err)
 	}

@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/artni96/url-shortener/internal/config/db"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 )
 
 func CreateURLHandler(w http.ResponseWriter, r *http.Request) {
@@ -93,6 +95,18 @@ func generateID(length int) (string, error) {
 		}
 	}
 	return resp, err
+}
+
+func URLRouter() chi.Router {
+	r := chi.NewRouter()
+	r.Use(middleware.RealIP)
+	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
+	r.Route("/", func(r chi.Router) {
+		r.Post("/", CreateURLHandler)
+		r.Get("/{id}", GetURLHandler)
+	})
+	return r
 }
 
 func isURLCorrect(url string) bool {
