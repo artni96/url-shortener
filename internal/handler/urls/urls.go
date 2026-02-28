@@ -65,7 +65,7 @@ func (h *URLHandler) CreateURLHandler(w http.ResponseWriter, r *http.Request) {
 
 	db.LocalDB[urlID] = urlStr
 
-	shortURL := fmt.Sprintf("http://%s/%s", h.responseURL, urlID)
+	shortURL := fmt.Sprintf("%s/%s", h.responseURL, urlID)
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusCreated)
 	w.Write([]byte(shortURL))
