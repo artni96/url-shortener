@@ -5,17 +5,17 @@ import (
 )
 
 type Config struct {
-	MainDomain  string
-	ResponseURL string
+	ServerAddress string
+	ResponseURL   string
 }
 
 func ParseFlags() (*Config, error) {
-	aFlag := flag.String("a", "", "request url")
+	aFlag := flag.String("a", "", "request domain")
 	bFlag := flag.String("b", "", "response url")
 	flag.Parse()
-	mainDomain := "localhost:8080"
+	serverAddress := "localhost:8080"
 	if *aFlag != "" {
-		mainDomain = *aFlag
+		serverAddress = *aFlag
 	}
 	responseURL := "http://localhost:8080"
 	if *bFlag != "" {
@@ -23,8 +23,8 @@ func ParseFlags() (*Config, error) {
 	}
 
 	conf := Config{
-		MainDomain:  mainDomain,
-		ResponseURL: responseURL,
+		ServerAddress: serverAddress,
+		ResponseURL:   responseURL,
 	}
 	return &conf, nil
 }

@@ -12,7 +12,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	err = http.ListenAndServe(cfg.MainDomain, urls.URLRouter(cfg))
+	err = http.ListenAndServe(cfg.ServerAddress, urls.URLRouter(cfg))
 	if err != nil {
 		panic(err)
 	}
