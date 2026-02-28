@@ -1,16 +1,21 @@
 package urls
 
 import (
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/artni96/url-shortener/internal/config"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestCreateURLHandler(t *testing.T) {
+	cfg := config.Config{
+		ServerAddress: "localhost:8080",
+		ResponseURL:   "localhost:8080",
+	}
+	h := NewURLHandler(&cfg)
 	type want struct {
 		status      int
 		contentType string
@@ -107,7 +112,7 @@ func TestCreateURLHandler(t *testing.T) {
 			stringBody := strings.NewReader(string(tt.request.body))
 			req := httptest.NewRequest(tt.request.method, "/", stringBody)
 			w := httptest.NewRecorder()
-			CreateURLHandler(w, req)
+			h.CreateURLHandler(w, req)
 			res := w.Result()
 			assert.Equal(t, tt.want.status, res.StatusCode)
 			assert.Equal(t, tt.want.contentType, res.Header.Get("Content-Type"))
@@ -118,12 +123,14 @@ func TestCreateURLHandler(t *testing.T) {
 }
 
 func TestGetURLHandler(t *testing.T) {
+	cfg := config.Config{
+		ServerAddress: "localhost:8080",
+		ResponseURL:   "localhost:8080",
+	}
+	h := NewURLHandler(&cfg)
 	type request struct {
 		method string
 		url    string
-	}
-	type requestToCreate struct {
-		url string
 	}
 	type want struct {
 		status      int
@@ -214,16 +221,16 @@ func TestGetURLHandler(t *testing.T) {
 
 			reqToCreate := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(tt.want.redirectTo))
 			w := httptest.NewRecorder()
-			CreateURLHandler(w, reqToCreate)
+			h.CreateURLHandler(w, reqToCreate)
 			shortURL := w.Body.String()
 			if tt.name == "not found" {
 				shortURL = shortURL + "wrong"
 			}
 
-			fmt.Println(shortURL)
 			req := httptest.NewRequest(tt.request.method, shortURL, nil)
 			w = httptest.NewRecorder()
-			GetURLHandler(w, req)
+
+			h.GetURLHandler(w, req)
 			res := w.Result()
 			assert.Equal(t, tt.want.status, res.StatusCode)
 			if tt.want.status == http.StatusTemporaryRedirect {
