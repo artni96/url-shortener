@@ -8,12 +8,23 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/artni96/url-shortener/internal/config"
 	"github.com/artni96/url-shortener/internal/config/db"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
 
-func CreateURLHandler(w http.ResponseWriter, r *http.Request) {
+type URLHandler struct {
+	responseURL string
+}
+
+func NewURLHandler(cfg *config.Config) *URLHandler {
+	return &URLHandler{
+		responseURL: cfg.ResponseURL,
+	}
+}
+
+func (h *URLHandler) CreateURLHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusBadRequest)
@@ -38,7 +49,7 @@ func CreateURLHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !isURLCorrect(urlStr) {
+	if !IsURLCorrect(urlStr) {
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("В тело запроса передан некорректный url"))
@@ -53,7 +64,8 @@ func CreateURLHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	db.LocalDB[urlID] = urlStr
-	shortURL := fmt.Sprintf("http://localhost:8080/%s", urlID)
+
+	shortURL := fmt.Sprintf("http://%s/%s", h.responseURL, urlID)
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusCreated)
 	w.Write([]byte(shortURL))
@@ -61,7 +73,7 @@ func CreateURLHandler(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 }
 
-func GetURLHandler(w http.ResponseWriter, r *http.Request) {
+func (h *URLHandler) GetURLHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(fmt.Sprintf("Метод %s запрещен", r.Method)))
@@ -97,19 +109,20 @@ func generateID(length int) (string, error) {
 	return resp, err
 }
 
-func URLRouter() chi.Router {
+func URLRouter(cfg *config.Config) chi.Router {
 	r := chi.NewRouter()
+	urlHandler := NewURLHandler(cfg)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Route("/", func(r chi.Router) {
-		r.Post("/", CreateURLHandler)
-		r.Get("/{id}", GetURLHandler)
+		r.Post("/", urlHandler.CreateURLHandler)
+		r.Get("/{id}", urlHandler.GetURLHandler)
 	})
 	return r
 }
 
-func isURLCorrect(url string) bool {
+func IsURLCorrect(url string) bool {
 	matched, err := regexp.MatchString(`^https?:\/\/`, url)
 	if err != nil {
 		return false
