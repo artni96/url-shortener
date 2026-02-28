@@ -36,13 +36,46 @@ func TestCreateURLHandler(t *testing.T) {
 			},
 		},
 		{
-			name: "wrong method",
+			name: "wrong GET method",
 			want: want{
 				status:      http.StatusBadRequest,
 				contentType: "text/plain",
 			},
 			request: request{
 				method: http.MethodGet,
+				body:   []byte("https://practicum.yandex.ru/"),
+			},
+		},
+		{
+			name: "wrong PUT method",
+			want: want{
+				status:      http.StatusBadRequest,
+				contentType: "text/plain",
+			},
+			request: request{
+				method: http.MethodPut,
+				body:   []byte("https://practicum.yandex.ru/"),
+			},
+		},
+		{
+			name: "wrong PATCH method",
+			want: want{
+				status:      http.StatusBadRequest,
+				contentType: "text/plain",
+			},
+			request: request{
+				method: http.MethodPatch,
+				body:   []byte("https://practicum.yandex.ru/"),
+			},
+		},
+		{
+			name: "wrong DELETE method",
+			want: want{
+				status:      http.StatusBadRequest,
+				contentType: "text/plain",
+			},
+			request: request{
+				method: http.MethodDelete,
 				body:   []byte("https://practicum.yandex.ru/"),
 			},
 		},
@@ -116,9 +149,45 @@ func TestGetURLHandler(t *testing.T) {
 			},
 		},
 		{
-			name: "method not allowed",
+			name: "wrong POST method",
 			request: request{
 				method: http.MethodPost,
+				url:    "/test",
+			},
+			want: want{
+				status:      http.StatusBadRequest,
+				contentType: "text/plain",
+				redirectTo:  "http://test.com",
+			},
+		},
+		{
+			name: "wrong Patch method",
+			request: request{
+				method: http.MethodPatch,
+				url:    "/test",
+			},
+			want: want{
+				status:      http.StatusBadRequest,
+				contentType: "text/plain",
+				redirectTo:  "http://test.com",
+			},
+		},
+		{
+			name: "wrong Put method",
+			request: request{
+				method: http.MethodPut,
+				url:    "/test",
+			},
+			want: want{
+				status:      http.StatusBadRequest,
+				contentType: "text/plain",
+				redirectTo:  "http://test.com",
+			},
+		},
+		{
+			name: "wrong Delete method",
+			request: request{
+				method: http.MethodDelete,
 				url:    "/test",
 			},
 			want: want{
