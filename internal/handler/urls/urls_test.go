@@ -3,6 +3,7 @@ package urls
 import (
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -272,6 +273,29 @@ func TestIsURLCorrect(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.Equal(t, IsURLCorrect(tt.url), tt.expected)
+		})
+	}
+}
+
+func TestGenerateShortURL(t *testing.T) {
+	tests := []struct {
+		name     string
+		idLength int
+	}{
+		{
+			name:     "success",
+			idLength: 10,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res, err := generateID(tt.idLength)
+			if err != nil {
+				t.Errorf("%s", err)
+			}
+			assert.Equal(t, len(res), tt.idLength)
+			assert.NotEmpty(t, res)
+			assert.True(t, reflect.TypeOf(res) == reflect.TypeOf("string"))
 		})
 	}
 }
