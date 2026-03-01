@@ -1,7 +1,6 @@
 package urls
 
 import (
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -126,7 +125,7 @@ func TestCreateURLHandler(t *testing.T) {
 func TestGetURLHandler(t *testing.T) {
 	cfg := config.Config{
 		ServerAddress: "localhost:8080",
-		ResponseURL:   "localhost:8080",
+		ResponseURL:   "http://localhost:8080",
 	}
 	h := NewURLHandler(&cfg)
 	type request struct {
@@ -153,7 +152,7 @@ func TestGetURLHandler(t *testing.T) {
 			want: want{
 				status:      http.StatusTemporaryRedirect,
 				contentType: "text/plain",
-				redirectTo:  "test.com",
+				redirectTo:  "http://test.com",
 			},
 		},
 		{
@@ -165,7 +164,7 @@ func TestGetURLHandler(t *testing.T) {
 			want: want{
 				status:      http.StatusBadRequest,
 				contentType: "text/plain",
-				redirectTo:  "test.com",
+				redirectTo:  "http://test.com",
 			},
 		},
 		{
@@ -177,7 +176,7 @@ func TestGetURLHandler(t *testing.T) {
 			want: want{
 				status:      http.StatusBadRequest,
 				contentType: "text/plain",
-				redirectTo:  "test.com",
+				redirectTo:  "http://test.com",
 			},
 		},
 		{
@@ -189,7 +188,7 @@ func TestGetURLHandler(t *testing.T) {
 			want: want{
 				status:      http.StatusBadRequest,
 				contentType: "text/plain",
-				redirectTo:  "test.com",
+				redirectTo:  "http://test.com",
 			},
 		},
 		{
@@ -201,7 +200,7 @@ func TestGetURLHandler(t *testing.T) {
 			want: want{
 				status:      http.StatusBadRequest,
 				contentType: "text/plain",
-				redirectTo:  "test.com",
+				redirectTo:  "http://test.com",
 			},
 		},
 		{
@@ -213,14 +212,14 @@ func TestGetURLHandler(t *testing.T) {
 			want: want{
 				status:      http.StatusBadRequest,
 				contentType: "text/plain",
-				redirectTo:  "test.com",
+				redirectTo:  "http://test.com",
 			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 
-			reqToCreate := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(fmt.Sprintf("http://%s", tt.want.redirectTo)))
+			reqToCreate := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(tt.want.redirectTo))
 			w := httptest.NewRecorder()
 			h.CreateURLHandler(w, reqToCreate)
 			shortURL := w.Body.String()
@@ -228,7 +227,7 @@ func TestGetURLHandler(t *testing.T) {
 				shortURL = shortURL + "wrong"
 			}
 
-			req := httptest.NewRequest(tt.request.method, fmt.Sprintf("http://%s", shortURL), nil)
+			req := httptest.NewRequest(tt.request.method, shortURL, nil)
 			w = httptest.NewRecorder()
 
 			h.GetURLHandler(w, req)
@@ -236,9 +235,43 @@ func TestGetURLHandler(t *testing.T) {
 			assert.Equal(t, tt.want.status, res.StatusCode)
 			if tt.want.status == http.StatusTemporaryRedirect {
 				assert.Equal(t, tt.want.contentType, res.Header.Get("Content-Type"))
-				assert.Equal(t, fmt.Sprintf("http://%s", tt.want.redirectTo), res.Header.Get("Location"))
+				assert.Equal(t, tt.want.redirectTo, res.Header.Get("Location"))
 			}
 			defer res.Body.Close()
+		})
+	}
+}
+
+func TestIsURLCorrect(t *testing.T) {
+	tests := []struct {
+		name     string
+		url      string
+		expected bool
+	}{
+		{
+			name:     "correct http",
+			url:      "http://test.com",
+			expected: true,
+		},
+		{
+			name:     "correct https",
+			url:      "https://test.com",
+			expected: true,
+		},
+		{
+			name:     "incorrect 1",
+			url:      "htp://test.com",
+			expected: false,
+		},
+		{
+			name:     "incorrect 2",
+			url:      "http:/test.com",
+			expected: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, IsURLCorrect(tt.url), tt.expected)
 		})
 	}
 }
