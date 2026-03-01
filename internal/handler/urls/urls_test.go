@@ -1,6 +1,7 @@
 package urls
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -152,7 +153,7 @@ func TestGetURLHandler(t *testing.T) {
 			want: want{
 				status:      http.StatusTemporaryRedirect,
 				contentType: "text/plain",
-				redirectTo:  "http://test.com",
+				redirectTo:  "test.com",
 			},
 		},
 		{
@@ -164,7 +165,7 @@ func TestGetURLHandler(t *testing.T) {
 			want: want{
 				status:      http.StatusBadRequest,
 				contentType: "text/plain",
-				redirectTo:  "http://test.com",
+				redirectTo:  "test.com",
 			},
 		},
 		{
@@ -176,7 +177,7 @@ func TestGetURLHandler(t *testing.T) {
 			want: want{
 				status:      http.StatusBadRequest,
 				contentType: "text/plain",
-				redirectTo:  "http://test.com",
+				redirectTo:  "test.com",
 			},
 		},
 		{
@@ -188,7 +189,7 @@ func TestGetURLHandler(t *testing.T) {
 			want: want{
 				status:      http.StatusBadRequest,
 				contentType: "text/plain",
-				redirectTo:  "http://test.com",
+				redirectTo:  "test.com",
 			},
 		},
 		{
@@ -200,7 +201,7 @@ func TestGetURLHandler(t *testing.T) {
 			want: want{
 				status:      http.StatusBadRequest,
 				contentType: "text/plain",
-				redirectTo:  "http://test.com",
+				redirectTo:  "test.com",
 			},
 		},
 		{
@@ -212,14 +213,14 @@ func TestGetURLHandler(t *testing.T) {
 			want: want{
 				status:      http.StatusBadRequest,
 				contentType: "text/plain",
-				redirectTo:  "http://test.com",
+				redirectTo:  "test.com",
 			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 
-			reqToCreate := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(tt.want.redirectTo))
+			reqToCreate := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(fmt.Sprintf("http://%s", tt.want.redirectTo)))
 			w := httptest.NewRecorder()
 			h.CreateURLHandler(w, reqToCreate)
 			shortURL := w.Body.String()
@@ -227,7 +228,7 @@ func TestGetURLHandler(t *testing.T) {
 				shortURL = shortURL + "wrong"
 			}
 
-			req := httptest.NewRequest(tt.request.method, shortURL, nil)
+			req := httptest.NewRequest(tt.request.method, fmt.Sprintf("http://%s", shortURL), nil)
 			w = httptest.NewRecorder()
 
 			h.GetURLHandler(w, req)
@@ -235,7 +236,7 @@ func TestGetURLHandler(t *testing.T) {
 			assert.Equal(t, tt.want.status, res.StatusCode)
 			if tt.want.status == http.StatusTemporaryRedirect {
 				assert.Equal(t, tt.want.contentType, res.Header.Get("Content-Type"))
-				assert.Equal(t, tt.want.redirectTo, res.Header.Get("Location"))
+				assert.Equal(t, fmt.Sprintf("http://%s", tt.want.redirectTo), res.Header.Get("Location"))
 			}
 			defer res.Body.Close()
 		})
