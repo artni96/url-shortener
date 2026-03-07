@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"net/http"
 	"regexp"
 	"strings"
@@ -13,6 +14,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
+
+const urlPattern = `^https?:\/\/`
 
 type URLHandler struct {
 	responseURL string
@@ -25,15 +28,7 @@ func NewURLHandler(cfg *config.Config) *URLHandler {
 }
 
 func (h *URLHandler) CreateURLHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		w.Header().Set("Content-Type", "text/plain")
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(fmt.Sprintf("Метод %s запрещен", r.Method)))
-		return
-	}
-
-	originalURL := make([]byte, r.ContentLength)
-	_, err := r.Body.Read(originalURL)
+	originalURL, err := io.ReadAll(r.Body)
 	if err != nil && err.Error() != "EOF" {
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusBadRequest)
@@ -49,7 +44,7 @@ func (h *URLHandler) CreateURLHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !IsURLCorrect(urlStr) {
+	if !isURLCorrect(urlStr) {
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("В тело запроса передан некорректный url"))
@@ -74,11 +69,6 @@ func (h *URLHandler) CreateURLHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *URLHandler) GetURLHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(fmt.Sprintf("Метод %s запрещен", r.Method)))
-		return
-	}
 	redirectTo := db.LocalDB[strings.TrimPrefix(r.URL.Path, "/")]
 	if redirectTo == "" {
 		w.WriteHeader(http.StatusBadRequest)
@@ -95,7 +85,7 @@ func generateID(length int) (string, error) {
 	bytes := make([]byte, length)
 	_, err := rand.Read(bytes)
 	if err != nil {
-		return "", err
+		return "", shortUrlGenerationError(err)
 	}
 	resp := base64.URLEncoding.EncodeToString(bytes)[:length]
 
@@ -103,7 +93,7 @@ func generateID(length int) (string, error) {
 	if _, ok := db.LocalDB[resp]; ok {
 		_, err = rand.Read(bytes)
 		if err != nil {
-			return "", err
+			return "", shortUrlGenerationError(err)
 		}
 	}
 	return resp, err
@@ -115,15 +105,22 @@ func URLRouter(cfg *config.Config) chi.Router {
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+
 	r.Route("/", func(r chi.Router) {
+		r.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(fmt.Sprintf("Метод %s запрещен", r.Method)))
+			return
+		})
 		r.Post("/", urlHandler.CreateURLHandler)
+
 		r.Get("/{id}", urlHandler.GetURLHandler)
 	})
 	return r
 }
 
-func IsURLCorrect(url string) bool {
-	matched, err := regexp.MatchString(`^https?:\/\/`, url)
+func isURLCorrect(url string) bool {
+	matched, err := regexp.MatchString(urlPattern, url)
 	if err != nil {
 		return false
 	}

@@ -2,6 +2,7 @@ package config
 
 import (
 	"flag"
+	"os"
 )
 
 type Config struct {
@@ -10,21 +11,13 @@ type Config struct {
 }
 
 func ParseFlags() (*Config, error) {
-	aFlag := flag.String("a", "", "request domain")
-	bFlag := flag.String("b", "", "response url")
-	flag.Parse()
-	serverAddress := "localhost:8080"
-	if *aFlag != "" {
-		serverAddress = *aFlag
-	}
-	responseURL := "http://localhost:8080"
-	if *bFlag != "" {
-		responseURL = *bFlag
-	}
-
-	conf := Config{
-		ServerAddress: serverAddress,
-		ResponseURL:   responseURL,
+	fs := flag.NewFlagSet("fs", flag.ExitOnError)
+	conf := Config{}
+	fs.StringVar(&conf.ServerAddress, "a", "localhost:8080", "server address")
+	fs.StringVar(&conf.ResponseURL, "b", "http://localhost:8080", "response URL")
+	err := fs.Parse(os.Args[1:])
+	if err != nil {
+		return nil, err
 	}
 	return &conf, nil
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"net/http"
 
 	"github.com/artni96/url-shortener/internal/config"
@@ -10,10 +11,10 @@ import (
 func main() {
 	cfg, err := config.ParseFlags()
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 	err = http.ListenAndServe(cfg.ServerAddress, urls.URLRouter(cfg))
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 }
