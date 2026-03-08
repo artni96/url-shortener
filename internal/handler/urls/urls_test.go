@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/artni96/url-shortener/internal/config"
+	"github.com/artni96/url-shortener/internal/repository"
+	"github.com/artni96/url-shortener/internal/service"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -16,7 +18,10 @@ func TestCreateURLHandler(t *testing.T) {
 		ServerAddress: "localhost:8080",
 		ResponseURL:   "http://localhost:8080",
 	}
-	h := NewURLHandler(&cfg)
+	urlRepo := repository.NewURLRepository()
+	urlService := service.NewURLService(urlRepo)
+	h := NewURLHandler(&cfg, urlService)
+
 	type want struct {
 		status      int
 		contentType string
@@ -84,7 +89,9 @@ func TestGetURLHandler(t *testing.T) {
 		ServerAddress: "localhost:8080",
 		ResponseURL:   "http://localhost:8080",
 	}
-	h := NewURLHandler(&cfg)
+	urlRepo := repository.NewURLRepository()
+	urlService := service.NewURLService(urlRepo)
+	h := NewURLHandler(&cfg, urlService)
 	type request struct {
 		method string
 		url    string

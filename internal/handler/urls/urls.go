@@ -11,6 +11,7 @@ import (
 
 	"github.com/artni96/url-shortener/internal/config"
 	"github.com/artni96/url-shortener/internal/config/db"
+	"github.com/artni96/url-shortener/internal/service"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
@@ -19,15 +20,18 @@ const urlPattern = `^https?:\/\/`
 
 type URLHandler struct {
 	responseURL string
+	urlService  service.URLServiceInterface
 }
 
-func NewURLHandler(cfg *config.Config) *URLHandler {
+func NewURLHandler(cfg *config.Config, urlService service.URLServiceInterface) *URLHandler {
 	return &URLHandler{
 		responseURL: cfg.ResponseURL,
+		urlService:  urlService,
 	}
 }
 
 func (h *URLHandler) CreateURLHandler(w http.ResponseWriter, r *http.Request) {
+
 	originalURL, err := io.ReadAll(r.Body)
 	if err != nil && err.Error() != "EOF" {
 		w.Header().Set("Content-Type", "text/plain")
@@ -58,23 +62,25 @@ func (h *URLHandler) CreateURLHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	db.LocalDB[urlID] = urlStr
-
-	shortURL := fmt.Sprintf("%s/%s", h.responseURL, urlID)
+	urlID, err = h.urlService.Create(urlStr, urlID)
+	if err != nil {
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("Не удалось обработать запрос"))
+	}
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusCreated)
-	w.Write([]byte(shortURL))
+	w.Write([]byte(fmt.Sprintf("%s/%s", h.responseURL, urlID)))
 
 	defer r.Body.Close()
 }
 
 func (h *URLHandler) GetURLHandler(w http.ResponseWriter, r *http.Request) {
-	redirectTo := db.LocalDB[strings.TrimPrefix(r.URL.Path, "/")]
-	if redirectTo == "" {
+	redirectTo, err := h.urlService.Get(strings.TrimPrefix(r.URL.Path, "/"))
+	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("Ссылка не найдена"))
 		return
-
 	}
 	w.Header().Set("Content-Type", "text/plain")
 	w.Header().Set("Location", redirectTo)
@@ -85,7 +91,7 @@ func generateID(length int) (string, error) {
 	bytes := make([]byte, length)
 	_, err := rand.Read(bytes)
 	if err != nil {
-		return "", shortUrlGenerationError(err)
+		return "", shortURLGenerationError(err)
 	}
 	resp := base64.URLEncoding.EncodeToString(bytes)[:length]
 
@@ -93,24 +99,24 @@ func generateID(length int) (string, error) {
 	if _, ok := db.LocalDB[resp]; ok {
 		_, err = rand.Read(bytes)
 		if err != nil {
-			return "", shortUrlGenerationError(err)
+			return "", shortURLGenerationError(err)
 		}
 	}
 	return resp, err
 }
 
-func URLRouter(cfg *config.Config) chi.Router {
+func URLRouter(cfg *config.Config, urlService service.URLServiceInterface) chi.Router {
 	r := chi.NewRouter()
-	urlHandler := NewURLHandler(cfg)
+
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+	urlHandler := NewURLHandler(cfg, urlService)
 
 	r.Route("/", func(r chi.Router) {
 		r.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusBadRequest)
 			w.Write([]byte(fmt.Sprintf("Метод %s запрещен", r.Method)))
-			return
 		})
 		r.Post("/", urlHandler.CreateURLHandler)
 
