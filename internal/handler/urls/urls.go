@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/artni96/url-shortener/internal/config"
-	"github.com/artni96/url-shortener/internal/config/db"
 	"github.com/artni96/url-shortener/internal/service"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -55,14 +54,7 @@ func (h *URLHandler) CreateURLHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	urlID, err := generateID(10)
-	if err != nil || urlID == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Не удалось обработать запрос"))
-		return
-	}
-
-	urlID, err = h.urlService.Create(urlStr, urlID)
+	urlID, err := h.urlService.Create(urlStr)
 	if err != nil {
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusBadRequest)
@@ -94,14 +86,6 @@ func generateID(length int) (string, error) {
 		return "", shortURLGenerationError(err)
 	}
 	resp := base64.URLEncoding.EncodeToString(bytes)[:length]
-
-	// Дополнительная проверка на уникальность сгенерированного ID
-	if _, ok := db.LocalDB[resp]; ok {
-		_, err = rand.Read(bytes)
-		if err != nil {
-			return "", shortURLGenerationError(err)
-		}
-	}
 	return resp, err
 }
 

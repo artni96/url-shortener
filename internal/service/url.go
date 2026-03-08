@@ -16,8 +16,8 @@ func (s *URLService) Get(urlID string) (string, error) {
 	return resp, nil
 }
 
-func (s *URLService) Create(urlStr, urlID string) (string, error) {
-	resp, err := s.repo.Create(urlStr, urlID)
+func (s *URLService) Create(urlStr string) (string, error) {
+	resp, err := s.repo.Create(urlStr)
 	if err != nil {
 		return "", err
 	}
@@ -26,7 +26,7 @@ func (s *URLService) Create(urlStr, urlID string) (string, error) {
 
 type URLServiceInterface interface {
 	Get(urlID string) (string, error)
-	Create(urlStr, urlID string) (string, error)
+	Create(urlStr string) (string, error)
 }
 
 func NewURLService(repo repository.URLRepositoryInterface) *URLService {
