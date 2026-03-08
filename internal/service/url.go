@@ -4,6 +4,10 @@ import (
 	"github.com/artni96/url-shortener/internal/repository"
 )
 
+type URLServiceInterface interface {
+	Get(urlID string) (string, error)
+	Create(urlStr string) (string, error)
+}
 type URLService struct {
 	repo repository.URLRepositoryInterface
 }
@@ -22,11 +26,6 @@ func (s *URLService) Create(urlStr string) (string, error) {
 		return "", err
 	}
 	return resp, nil
-}
-
-type URLServiceInterface interface {
-	Get(urlID string) (string, error)
-	Create(urlStr string) (string, error)
 }
 
 func NewURLService(repo repository.URLRepositoryInterface) *URLService {
