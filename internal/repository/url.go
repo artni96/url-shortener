@@ -2,7 +2,6 @@ package repository
 
 import (
 	"errors"
-	"fmt"
 	"sync"
 )
 
@@ -17,7 +16,7 @@ func (repo *LocalURLRepository) Create(urlStr string, urlID string) (string, err
 	repo.mu.Lock()
 	defer repo.mu.Unlock()
 	repo.urls[urlID] = urlStr
-	return fmt.Sprintf("%s", urlID), nil
+	return urlID, nil
 }
 
 func (repo *LocalURLRepository) Get(urlID string) (string, error) {
@@ -25,7 +24,7 @@ func (repo *LocalURLRepository) Get(urlID string) (string, error) {
 	defer repo.mu.RUnlock()
 	urlStr, ok := repo.urls[urlID]
 	if !ok {
-		return "", errors.New("URL не найден!")
+		return "", errors.New("URL не найден")
 	}
 	return urlStr, nil
 }
