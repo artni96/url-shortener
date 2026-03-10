@@ -1,8 +1,7 @@
 package urls
 
 import (
-	"crypto/rand"
-	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -56,9 +55,15 @@ func (h *URLHandler) CreateURLHandler(w http.ResponseWriter, r *http.Request) {
 
 	urlID, err := h.urlService.Create(urlStr)
 	if err != nil {
-		w.Header().Set("Content-Type", "text/plain")
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Не удалось обработать запрос"))
+		if errors.Is(err, &service.FailedToCreatedError{}) {
+			w.Header().Set("Content-Type", "text/plain")
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+		} else {
+			w.Header().Set("Content-Type", "text/plain")
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte("Не удалось обработать запрос"))
+		}
 	}
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusCreated)
@@ -77,16 +82,6 @@ func (h *URLHandler) GetURLHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain")
 	w.Header().Set("Location", redirectTo)
 	w.WriteHeader(http.StatusTemporaryRedirect)
-}
-
-func generateID(length int) (string, error) {
-	bytes := make([]byte, length)
-	_, err := rand.Read(bytes)
-	if err != nil {
-		return "", shortURLGenerationError(err)
-	}
-	resp := base64.URLEncoding.EncodeToString(bytes)[:length]
-	return resp, err
 }
 
 func URLRouter(cfg *config.Config, urlService service.URLServiceInterface) chi.Router {

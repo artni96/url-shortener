@@ -10,6 +10,7 @@ import (
 	"github.com/artni96/url-shortener/internal/config"
 	"github.com/artni96/url-shortener/internal/repository"
 	"github.com/artni96/url-shortener/internal/service"
+	"github.com/artni96/url-shortener/internal/utility"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -204,7 +205,7 @@ func TestGenerateShortURL(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			res, err := generateID(tt.idLength)
+			res, err := utility.GenerateID(tt.idLength)
 			if err != nil {
 				t.Errorf("%s", err)
 			}

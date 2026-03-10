@@ -1,7 +1,10 @@
 package service
 
 import (
+	"errors"
+
 	"github.com/artni96/url-shortener/internal/repository"
+	"github.com/artni96/url-shortener/internal/utility"
 )
 
 type URLServiceInterface interface {
@@ -21,11 +24,22 @@ func (s *URLService) Get(urlID string) (string, error) {
 }
 
 func (s *URLService) Create(urlStr string) (string, error) {
-	resp, err := s.repo.Create(urlStr)
-	if err != nil {
-		return "", err
+	for _ = range 5 {
+		urlID, err := utility.GenerateID(10)
+		if err != nil {
+			return "", err
+		}
+		resp, err := s.repo.Create(urlStr, urlID)
+		if err != nil {
+			if errors.Is(err, &repository.DuplicateURLIDError{}) {
+				continue
+			} else {
+				return "", err
+			}
+		}
+		return resp, nil
 	}
-	return resp, nil
+	return "", &FailedToCreatedError{}
 }
 
 func NewURLService(repo repository.URLRepositoryInterface) *URLService {
