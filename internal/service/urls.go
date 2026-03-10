@@ -27,7 +27,7 @@ func (s *URLService) Create(urlStr string) (string, error) {
 	for range 5 {
 		urlID, err := utility.GenerateID(10)
 		if err != nil {
-			return "", err
+			continue
 		}
 		resp, err := s.repo.Create(urlStr, urlID)
 		if err != nil {
