@@ -24,7 +24,7 @@ func (s *URLService) Get(urlID string) (string, error) {
 }
 
 func (s *URLService) Create(urlStr string) (string, error) {
-	for _ = range 5 {
+	for range 5 {
 		urlID, err := utility.GenerateID(10)
 		if err != nil {
 			return "", err
