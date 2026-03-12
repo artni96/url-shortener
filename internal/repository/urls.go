@@ -2,8 +2,11 @@ package repository
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 )
+
+var DuplicateURLIDError = errors.New("%s найден в БД")
 
 type URLRepositoryInterface interface {
 	Get(urlID string) (string, error)
@@ -31,7 +34,7 @@ func (repo *LocalURLRepository) Get(urlID string) (string, error) {
 	defer repo.mu.RUnlock()
 	urlStr, ok := repo.urls[urlID]
 	if !ok {
-		return "", &DuplicateURLIDError{urlID}
+		return "", fmt.Errorf("%w", DuplicateURLIDError)
 	}
 	return urlStr, nil
 }

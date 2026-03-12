@@ -55,7 +55,7 @@ func (h *URLHandler) CreateURLHandler(w http.ResponseWriter, r *http.Request) {
 
 	urlID, err := h.urlService.Create(urlStr)
 	if err != nil {
-		if errors.Is(err, &service.FailedToCreatedError{}) {
+		if errors.Is(err, service.FailedToCreatedError) {
 			w.Header().Set("Content-Type", "text/plain")
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(err.Error()))
