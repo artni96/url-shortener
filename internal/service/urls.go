@@ -8,7 +8,7 @@ import (
 	"github.com/artni96/url-shortener/internal/utility"
 )
 
-var FailedToCreatedError = errors.New("Не удалось создать ссылку для")
+var ErrFailedToCreated = errors.New("Не удалось создать ссылку для")
 
 type URLServiceInterface interface {
 	Get(urlID string) (string, error)
@@ -34,7 +34,7 @@ func (s *URLService) Create(urlStr string) (string, error) {
 		}
 		resp, err := s.repo.Create(urlStr, urlID)
 		if err != nil {
-			if errors.Is(err, repository.DuplicateURLIDError) {
+			if errors.Is(err, repository.ErrURLIDDuplicate) {
 				continue
 			} else {
 				return "", err
@@ -42,7 +42,7 @@ func (s *URLService) Create(urlStr string) (string, error) {
 		}
 		return resp, nil
 	}
-	return "", fmt.Errorf("%w %s", FailedToCreatedError, urlStr)
+	return "", fmt.Errorf("%w %s", ErrFailedToCreated, urlStr)
 }
 
 func NewURLService(repo repository.URLRepositoryInterface) *URLService {
