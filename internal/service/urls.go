@@ -8,7 +8,7 @@ import (
 	"github.com/artni96/url-shortener/internal/utility"
 )
 
-var ErrFailedToCreated = errors.New("Не удалось создать ссылку для")
+var ErrFailedToCreated = errors.New("не удалось создать ссылку для")
 
 type URLServiceInterface interface {
 	Get(urlID string) (string, error)
