@@ -2,6 +2,7 @@ package config
 
 import (
 	"flag"
+	"fmt"
 	"os"
 )
 
@@ -13,19 +14,21 @@ type Config struct {
 func ParseFlags() (*Config, error) {
 	fs := flag.NewFlagSet("fs", flag.ExitOnError)
 	conf := Config{}
-	if envServerAddress := os.Getenv("SERVER_ADDRESS"); envServerAddress != "" {
-		conf.ServerAddress = envServerAddress
-	} else {
-		fs.StringVar(&conf.ServerAddress, "a", "localhost:8080", "server address")
-	}
-	if envBaseURL := os.Getenv("BASE_URL"); envBaseURL != "" {
-		conf.ResponseURL = envBaseURL
-	} else {
-		fs.StringVar(&conf.ResponseURL, "b", "http://localhost:8080", "response URL")
-	}
+	fs.StringVar(&conf.ServerAddress, "a", "localhost:8080", "server address")
+	fs.StringVar(&conf.ResponseURL, "b", "http://localhost:8080", "response URL")
+
 	err := fs.Parse(os.Args[1:])
 	if err != nil {
 		return nil, err
 	}
+
+	if envServerAddress := os.Getenv("SERVER_ADDRESS"); envServerAddress != "" {
+		conf.ServerAddress = envServerAddress
+	}
+	if envBaseURL := os.Getenv("BASE_URL"); envBaseURL != "" {
+		conf.ResponseURL = envBaseURL
+	}
+
+	fmt.Println(conf.ServerAddress)
 	return &conf, nil
 }
