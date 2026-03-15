@@ -2,7 +2,6 @@ package config
 
 import (
 	"flag"
-	"fmt"
 	"os"
 )
 
@@ -28,7 +27,5 @@ func ParseFlags() (*Config, error) {
 	if envBaseURL := os.Getenv("BASE_URL"); envBaseURL != "" {
 		conf.ResponseURL = envBaseURL
 	}
-
-	fmt.Println(conf.ServerAddress)
 	return &conf, nil
 }

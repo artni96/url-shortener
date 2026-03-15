@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/artni96/url-shortener/internal/config"
+	"github.com/artni96/url-shortener/internal/logger"
 	"github.com/artni96/url-shortener/internal/service"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -88,7 +89,7 @@ func URLRouter(cfg *config.Config, urlService service.URLServiceInterface) chi.R
 	r := chi.NewRouter()
 
 	r.Use(middleware.RealIP)
-	r.Use(middleware.Logger)
+	r.Use(logger.RequestLogger)
 	r.Use(middleware.Recoverer)
 	urlHandler := NewURLHandler(cfg, urlService)
 
