@@ -25,7 +25,7 @@ func run(cfg *config.Config) error {
 	urlRepository := repository.NewURLRepository()
 	urlService := service.NewURLService(urlRepository)
 	urlHandler := urls.URLRouter(cfg, urlService)
-	if err := logger.InitLogger("Info"); err != nil {
+	if err := logger.InitLogger(cfg.DebugLevel); err != nil {
 		return err
 	}
 	logger.Logger.Info("Starting server")
