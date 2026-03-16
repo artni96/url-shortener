@@ -32,6 +32,7 @@ func (repo *LocalURLRepository) Create(urlStr, urlID string) (string, error) {
 func (repo *LocalURLRepository) Get(urlID string) (string, error) {
 	repo.mu.RLock()
 	defer repo.mu.RUnlock()
+
 	urlStr, ok := repo.urls[urlID]
 	if !ok {
 		return "", fmt.Errorf("%s %w", urlID, ErrURLIDDuplicate)

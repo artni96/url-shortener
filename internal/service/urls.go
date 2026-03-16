@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/artni96/url-shortener/internal/logger"
 	"github.com/artni96/url-shortener/internal/repository"
 	"github.com/artni96/url-shortener/internal/utility"
 )
@@ -27,16 +28,19 @@ func (s *URLService) Get(urlID string) (string, error) {
 }
 
 func (s *URLService) Create(urlStr string) (string, error) {
-	for range 5 {
+	for i := range 5 {
 		urlID, err := utility.GenerateID(10)
 		if err != nil {
+			logger.Logger.Infof("создание urlID, попытка №%d\n", i)
 			continue
 		}
 		resp, err := s.repo.Create(urlStr, urlID)
 		if err != nil {
 			if errors.Is(err, repository.ErrURLIDDuplicate) {
+				logger.Logger.Infof("создание urlID, попытка №%d\n", i)
 				continue
 			} else {
+				logger.Logger.Errorf("не удалось создать короткую ссылку для %s\n", urlStr)
 				return "", err
 			}
 		}
