@@ -60,7 +60,7 @@ func (h *URLHandler) ShortenURLHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	urlID, err := h.urlService.Create(body.URL)
-	responseData.Result = fmt.Sprintf("%s/%s\n", h.responseURL, urlID)
+	responseData.Result = fmt.Sprintf("%s/%s", h.responseURL, urlID)
 
 	if err != nil {
 		if errors.Is(err, service.ErrFailedToCreated) {
