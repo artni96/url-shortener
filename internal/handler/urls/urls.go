@@ -1,6 +1,8 @@
 package urls
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -10,6 +12,7 @@ import (
 
 	"github.com/artni96/url-shortener/internal/config"
 	"github.com/artni96/url-shortener/internal/logger"
+	"github.com/artni96/url-shortener/internal/model"
 	"github.com/artni96/url-shortener/internal/service"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -27,6 +30,58 @@ func NewURLHandler(cfg *config.Config, urlService service.URLServiceInterface) *
 		responseURL: cfg.ResponseURL,
 		urlService:  urlService,
 	}
+}
+
+func (h *URLHandler) ShortenURLHandler(w http.ResponseWriter, r *http.Request) {
+	var responseData model.URLCreateResponse
+
+	var body model.URLCreateRequest
+	var buf bytes.Buffer
+
+	_, err := buf.ReadFrom(r.Body)
+	defer r.Body.Close()
+
+	if err != nil {
+		errMessage := "invalid request"
+		ErrorResponse(w, errMessage)
+		return
+	}
+
+	if err = json.Unmarshal(buf.Bytes(), &body); err != nil {
+		errMessage := "invalid request"
+		ErrorResponse(w, errMessage)
+		return
+	}
+
+	if !isURLCorrect(body.URL) {
+		errMessage := fmt.Sprintf("url '%s' is invalid", body.URL)
+		ErrorResponse(w, errMessage)
+		return
+	}
+
+	urlID, err := h.urlService.Create(body.URL)
+	responseData.Result = fmt.Sprintf("%s/%s\n", h.responseURL, urlID)
+
+	if err != nil {
+		if errors.Is(err, service.ErrFailedToCreated) {
+			errMessage := err.Error()
+			ErrorResponse(w, errMessage)
+			return
+		} else {
+			errMessage := fmt.Sprintf("Could not create short URL for %s", body.URL)
+			ErrorResponse(w, errMessage)
+			return
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	resp, err := json.Marshal(responseData)
+	if err != nil {
+		errMessage := fmt.Sprintf("Could not create short URL for %s", body.URL)
+		ErrorResponse(w, errMessage)
+		return
+	}
+	w.Write(resp)
 }
 
 func (h *URLHandler) CreateURLHandler(w http.ResponseWriter, r *http.Request) {
@@ -99,6 +154,7 @@ func URLRouter(cfg *config.Config, urlService service.URLServiceInterface) chi.R
 			w.Write([]byte(fmt.Sprintf("Метод %s запрещен", r.Method)))
 		})
 		r.Post("/", urlHandler.CreateURLHandler)
+		r.Post("/shorten", urlHandler.ShortenURLHandler)
 
 		r.Get("/{id}", urlHandler.GetURLHandler)
 	})
