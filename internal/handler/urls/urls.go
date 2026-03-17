@@ -154,7 +154,7 @@ func URLRouter(cfg *config.Config, urlService service.URLServiceInterface) chi.R
 			w.Write([]byte(fmt.Sprintf("Метод %s запрещен", r.Method)))
 		})
 		r.Post("/", urlHandler.CreateURLHandler)
-		r.Post("/shorten", urlHandler.ShortenURLHandler)
+		r.Post("/api/shorten", urlHandler.ShortenURLHandler)
 
 		r.Get("/{id}", urlHandler.GetURLHandler)
 	})

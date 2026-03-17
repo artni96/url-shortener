@@ -52,7 +52,7 @@ func TestShortenURL(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			reqBody := strings.NewReader(tt.request.body)
 
-			req := httptest.NewRequest(tt.request.method, "/shorten", reqBody)
+			req := httptest.NewRequest(tt.request.method, "/api/shorten", reqBody)
 			w := httptest.NewRecorder()
 			h.ShortenURLHandler(w, req)
 			res := w.Result()
