@@ -2,20 +2,17 @@ package urls
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
-
-	"github.com/artni96/url-shortener/internal/model"
 )
 
-func shortURLGenerationError(err error) error {
-	return fmt.Errorf("ошибка при генерации короткой ссылки: %w", err)
+type ErrorResponseStruct struct {
+	Error string `json:"error"`
 }
 
 func ErrorResponse(w http.ResponseWriter, errMessage string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusBadRequest)
-	errResp := model.ErrorResponse{
+	errResp := ErrorResponseStruct{
 		Error: errMessage,
 	}
 	resp, err := json.Marshal(errResp)

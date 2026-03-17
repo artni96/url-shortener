@@ -14,6 +14,58 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestShortenURL(t *testing.T) {
+	cfg := config.Config{
+		ServerAddress: "localhost:8080",
+		ResponseURL:   "http://localhost:8080",
+	}
+	urlRepo := repository.NewURLRepository()
+	urlService := service.NewURLService(urlRepo)
+	h := NewURLHandler(&cfg, urlService)
+
+	type want struct {
+		contentType string
+		status      int
+	}
+	type request struct {
+		body   string
+		method string
+	}
+	tests := []struct {
+		name    string
+		request request
+		want    want
+	}{
+		{
+			name: "success",
+			request: request{
+				body:   `{"url":"https://google.com"}`,
+				method: http.MethodPost,
+			},
+			want: want{
+				contentType: "application/json",
+				status:      http.StatusCreated,
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reqBody := strings.NewReader(tt.request.body)
+
+			req := httptest.NewRequest(tt.request.method, "/shorten", reqBody)
+			w := httptest.NewRecorder()
+			h.ShortenURLHandler(w, req)
+			res := w.Result()
+
+			assert.Equal(t, tt.want.status, res.StatusCode)
+			assert.Equal(t, tt.want.contentType, res.Header.Get("Content-Type"))
+			assert.NotEmpty(t, res.Body)
+			defer res.Body.Close()
+		})
+	}
+
+}
+
 func TestCreateURLHandler(t *testing.T) {
 	cfg := config.Config{
 		ServerAddress: "localhost:8080",
