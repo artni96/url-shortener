@@ -26,6 +26,7 @@ func TestShortenURL(t *testing.T) {
 	type want struct {
 		contentType string
 		status      int
+		message     string
 	}
 	type request struct {
 		body   string
@@ -47,6 +48,30 @@ func TestShortenURL(t *testing.T) {
 				status:      http.StatusCreated,
 			},
 		},
+		{
+			name: "invalid url",
+			request: request{
+				body:   `{"url":"hhtps://google.com"}`,
+				method: http.MethodPost,
+			},
+			want: want{
+				contentType: "application/json",
+				status:      http.StatusBadRequest,
+				message:     `{"error":"url 'hhtps://google.com' is invalid"}`,
+			},
+		},
+		{
+			name: "empty body",
+			request: request{
+				body:   ``,
+				method: http.MethodPost,
+			},
+			want: want{
+				contentType: "application/json",
+				status:      http.StatusBadRequest,
+				message:     `{"error":"invalid request - no body"}`,
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -59,6 +84,9 @@ func TestShortenURL(t *testing.T) {
 
 			assert.Equal(t, tt.want.status, res.StatusCode)
 			assert.Equal(t, tt.want.contentType, res.Header.Get("Content-Type"))
+			if tt.want.status == http.StatusBadRequest {
+				assert.Equal(t, tt.want.message, w.Body.String())
+			}
 			assert.NotEmpty(t, res.Body)
 			defer res.Body.Close()
 		})

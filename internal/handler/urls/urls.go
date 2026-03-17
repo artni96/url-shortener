@@ -42,13 +42,13 @@ func (h *URLHandler) ShortenURLHandler(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	if err != nil {
-		errMessage := "invalid request"
+		errMessage := "invalid request - no body"
 		ErrorResponse(w, errMessage)
 		return
 	}
 
 	if err = json.Unmarshal(buf.Bytes(), &body); err != nil {
-		errMessage := "invalid request"
+		errMessage := "invalid request - no body"
 		ErrorResponse(w, errMessage)
 		return
 	}
