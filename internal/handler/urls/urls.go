@@ -146,6 +146,7 @@ func URLRouter(cfg *config.Config, urlService service.URLServiceInterface) chi.R
 	r.Use(middleware.RealIP)
 	r.Use(logger.RequestLogger)
 	r.Use(middleware.Recoverer)
+	r.Use(config.GzipMiddleware)
 	urlHandler := NewURLHandler(cfg, urlService)
 
 	r.Route("/", func(r chi.Router) {
