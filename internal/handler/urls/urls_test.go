@@ -85,7 +85,7 @@ func TestShortenURL(t *testing.T) {
 			assert.Equal(t, tt.want.status, res.StatusCode)
 			assert.Equal(t, tt.want.contentType, res.Header.Get("Content-Type"))
 			if tt.want.status == http.StatusBadRequest {
-				assert.Equal(t, tt.want.message, w.Body.String())
+				assert.JSONEq(t, tt.want.message, w.Body.String())
 			}
 			assert.NotEmpty(t, res.Body)
 			defer res.Body.Close()
