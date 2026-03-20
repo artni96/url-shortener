@@ -10,10 +10,12 @@ import (
 
 var ErrURLIDDuplicate = errors.New("найден в БД")
 var ErrURLNotFound = errors.New("url not found")
+var ErrURLAlreadyExists = errors.New("url already exists")
 
 type URLRepositoryInterface interface {
 	GetByID(urlID string) (model.URLEntity, error)
 	Create(urlStr, urlID string) (model.URLEntity, error)
+	UploadURL(url model.URLEntity) error
 }
 type LocalURLRepository struct {
 	mu   sync.RWMutex
@@ -71,4 +73,16 @@ func getLastID(storage []model.URLEntity) int {
 		}
 	}
 	return lastID + 1
+}
+
+func (repo *LocalURLRepository) UploadURL(urlEntity model.URLEntity) error {
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
+	_, err := repo.GetByIDUnlocked(string(urlEntity.ID))
+	if err != nil {
+		if errors.Is(err, ErrURLNotFound) {
+			repo.urls = append(repo.urls, urlEntity)
+		}
+	}
+	return errors.New(ErrURLIDDuplicate.Error())
 }

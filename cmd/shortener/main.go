@@ -21,9 +21,8 @@ func main() {
 }
 
 func run(cfg *config.Config) error {
-
 	urlRepository := repository.NewURLRepository()
-	urlService := service.NewURLService(urlRepository)
+	urlService := service.NewURLService(urlRepository, *cfg)
 	urlHandler := urls.URLRouter(cfg, urlService)
 	if err := logger.InitLogger(cfg.DebugLevel); err != nil {
 		return err

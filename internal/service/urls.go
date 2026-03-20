@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/artni96/url-shortener/internal/config"
 	"github.com/artni96/url-shortener/internal/logger"
 	"github.com/artni96/url-shortener/internal/model"
 	"github.com/artni96/url-shortener/internal/repository"
@@ -21,6 +22,7 @@ type URLServiceInterface interface {
 }
 type URLService struct {
 	repo repository.URLRepositoryInterface
+	cfg  *config.Config
 }
 
 func (s *URLService) GetByID(urlID string) (string, error) {
@@ -36,21 +38,20 @@ func (s *URLService) Create(urlStr string) (string, error) {
 	for i := range 5 {
 		urlID, err := utility.GenerateID(10)
 		if err != nil {
-			logger.Logger.Infof("создание urlID, попытка №%d\n", i)
+			logger.Logger.Infof("urlID creation, attempt №%d\n", i)
 			continue
 		}
 		resp, err := s.repo.Create(urlStr, urlID)
 		if err != nil {
 			if errors.Is(err, repository.ErrURLIDDuplicate) {
-				logger.Logger.Infof("создание urlID, попытка №%d\n", i)
+				logger.Logger.Infof("urlID creation, attempt №%d\n", i)
 				continue
 			} else {
 				logger.Logger.Errorf("не удалось создать короткую ссылку для %s\n", urlStr)
 				return "", err
 			}
 		}
-		filename := "test.json"
-		fileWriter, err := NewWriter(filename)
+		fileWriter, err := NewWriter(s.cfg.FileStoragePath)
 		if err != nil {
 			return "", err
 		}
@@ -65,8 +66,8 @@ func (s *URLService) Create(urlStr string) (string, error) {
 	return "", fmt.Errorf("%w %s", ErrFailedToCreated, urlStr)
 }
 
-func NewURLService(repo repository.URLRepositoryInterface) *URLService {
-	return &URLService{repo: repo}
+func NewURLService(repo repository.URLRepositoryInterface, cfg config.Config) *URLService {
+	return &URLService{repo: repo, cfg: &cfg}
 }
 
 type Writer struct {
@@ -100,4 +101,62 @@ func (w *Writer) WriteObject(urlEntity *model.URLEntity) error {
 
 func (w *Writer) Close() error {
 	return w.file.Close()
+}
+
+type Reader struct {
+	file    *os.File
+	scanner *bufio.Scanner
+}
+
+func NewReader(filename string) (*Reader, error) {
+	file, err := os.OpenFile(filename, os.O_RDONLY|os.O_CREATE, 0666)
+	if err != nil {
+		return nil, err
+	}
+	return &Reader{file: file, scanner: bufio.NewScanner(file)}, nil
+}
+
+func (r *Reader) Close() error {
+	return r.file.Close()
+}
+
+func (r *Reader) ReadAllObjects() ([]model.URLEntity, error) {
+	var result []model.URLEntity
+	for r.scanner.Scan() {
+
+		data := r.scanner.Bytes()
+
+		object := model.URLEntity{}
+		if err := json.Unmarshal(data, &object); err != nil {
+			return nil, err
+		}
+		result = append(result, object)
+	}
+	return result, nil
+}
+
+func (s *URLService) BulkCreate(filepath string) error {
+	fileReader, err := NewReader(filepath)
+	defer func(fileReader *Reader) {
+		err := fileReader.Close()
+		if err != nil {
+
+		}
+	}(fileReader)
+
+	if err != nil {
+		return err
+	}
+	result, err := fileReader.ReadAllObjects()
+	if err != nil {
+		return err
+	}
+	for _, object := range result {
+		err := s.repo.UploadURL(object)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

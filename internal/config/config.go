@@ -6,9 +6,10 @@ import (
 )
 
 type Config struct {
-	ServerAddress string `env:"SERVER_ADDRESS"`
-	ResponseURL   string `env:"BASE_URL"`
-	DebugLevel    string `env:"DEBUG_LEVEL"`
+	ServerAddress   string `env:"SERVER_ADDRESS"`
+	ResponseURL     string `env:"BASE_URL"`
+	DebugLevel      string `env:"DEBUG_LEVEL"`
+	FileStoragePath string `env:"FILE_STORAGE_PATH"`
 }
 
 func ParseFlags() (*Config, error) {
@@ -16,6 +17,7 @@ func ParseFlags() (*Config, error) {
 	conf := Config{}
 	fs.StringVar(&conf.ServerAddress, "a", "localhost:8080", "server address")
 	fs.StringVar(&conf.ResponseURL, "b", "http://localhost:8080", "response URL")
+	fs.StringVar(&conf.FileStoragePath, "f", "./data/local_storage.json", "file storage path")
 	fs.StringVar(&conf.DebugLevel, "debug", "Info", "debug level")
 
 	err := fs.Parse(os.Args[1:])
@@ -32,5 +34,12 @@ func ParseFlags() (*Config, error) {
 	if envDebugLevel := os.Getenv("DEBUG_LEVEL"); envDebugLevel != "" {
 		conf.DebugLevel = envDebugLevel
 	}
+	if envFileStorePath := os.Getenv("FILE_STORAGE_PATH"); envFileStorePath != "" {
+		conf.FileStoragePath = envFileStorePath
+	}
 	return &conf, nil
+}
+
+func (conf *Config) UploadDB() string {
+	return conf.FileStoragePath
 }
