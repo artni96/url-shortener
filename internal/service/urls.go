@@ -1,8 +1,10 @@
 package service
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
+	"os"
 
 	"github.com/artni96/url-shortener/internal/logger"
 	"github.com/artni96/url-shortener/internal/repository"
@@ -20,7 +22,7 @@ type URLService struct {
 }
 
 func (s *URLService) Get(urlID string) (string, error) {
-	resp, err := s.repo.Get(urlID)
+	resp, err := s.repo.GetByID(urlID)
 	if err != nil {
 		return "", err
 	}
@@ -28,6 +30,7 @@ func (s *URLService) Get(urlID string) (string, error) {
 }
 
 func (s *URLService) Create(urlStr string) (string, error) {
+
 	for i := range 5 {
 		urlID, err := utility.GenerateID(10)
 		if err != nil {
@@ -44,11 +47,28 @@ func (s *URLService) Create(urlStr string) (string, error) {
 				return "", err
 			}
 		}
-		return resp, nil
+		return resp.ShortURL, nil
 	}
 	return "", fmt.Errorf("%w %s", ErrFailedToCreated, urlStr)
 }
 
 func NewURLService(repo repository.URLRepositoryInterface) *URLService {
 	return &URLService{repo: repo}
+}
+
+type Writer struct {
+	file    *os.File
+	scanner *bufio.Writer
+}
+
+func NewWriter(filename string) (*Writer, error) {
+	file, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return nil, err
+	}
+	return &Writer{file: file, scanner: bufio.NewWriter(file)}, nil
+}
+
+func (w *Writer) WriteObject(urlStr string) error {
+	return nil
 }
