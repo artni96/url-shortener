@@ -132,6 +132,7 @@ func (h *URLHandler) GetURLHandler(w http.ResponseWriter, r *http.Request) {
 	redirectTo, err := h.urlService.Get(strings.TrimPrefix(r.URL.Path, "/"))
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
+		//resp, err := json.Marshal(responseData)
 		w.Write([]byte("Ссылка не найдена"))
 		return
 	}

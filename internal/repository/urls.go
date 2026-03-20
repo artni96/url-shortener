@@ -9,7 +9,7 @@ import (
 )
 
 var ErrURLIDDuplicate = errors.New("найден в БД")
-var ErrUrlNotFound = errors.New("url not found")
+var ErrURLNotFound = errors.New("url not found")
 
 type URLRepositoryInterface interface {
 	GetByID(urlID string) (string, error)
@@ -28,7 +28,7 @@ func (repo *LocalURLRepository) Create(urlStr, urlID string) (model.URLEntity, e
 	_, err := repo.GetByIDUnlocked(urlID)
 	newEntity := model.URLEntity{}
 	if err != nil {
-		if !errors.Is(err, ErrUrlNotFound) {
+		if !errors.Is(err, ErrURLNotFound) {
 			return newEntity, err
 		}
 
@@ -49,7 +49,7 @@ func (repo *LocalURLRepository) GetByID(urlID string) (string, error) {
 
 func (repo *LocalURLRepository) GetByIDUnlocked(urlID string) (string, error) {
 	if len(repo.urls) == 0 {
-		return "", ErrUrlNotFound
+		return "", ErrURLNotFound
 	}
 
 	for _, entity := range repo.urls {
@@ -57,7 +57,7 @@ func (repo *LocalURLRepository) GetByIDUnlocked(urlID string) (string, error) {
 			return entity.OriginalURL, nil
 		}
 	}
-	return "", fmt.Errorf("%s %w", urlID, ErrURLIDDuplicate)
+	return "", fmt.Errorf("%s %w", urlID, ErrURLNotFound)
 }
 
 func NewURLRepository() *LocalURLRepository {
