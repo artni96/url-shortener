@@ -14,19 +14,19 @@ import (
 var ErrFailedToCreated = errors.New("не удалось создать ссылку для")
 
 type URLServiceInterface interface {
-	Get(urlID string) (string, error)
+	GetByID(urlID string) (string, error)
 	Create(urlStr string) (string, error)
 }
 type URLService struct {
 	repo repository.URLRepositoryInterface
 }
 
-func (s *URLService) Get(urlID string) (string, error) {
+func (s *URLService) GetByID(urlID string) (string, error) {
 	resp, err := s.repo.GetByID(urlID)
 	if err != nil {
 		return "", err
 	}
-	return resp, nil
+	return resp.OriginalURL, nil
 }
 
 func (s *URLService) Create(urlStr string) (string, error) {

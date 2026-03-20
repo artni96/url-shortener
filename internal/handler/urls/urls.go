@@ -129,16 +129,16 @@ func (h *URLHandler) CreateURLHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *URLHandler) GetURLHandler(w http.ResponseWriter, r *http.Request) {
-	redirectTo, err := h.urlService.Get(strings.TrimPrefix(r.URL.Path, "/"))
+	redirectTo, err := h.urlService.GetByID(strings.TrimPrefix(r.URL.Path, "/"))
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		//resp, err := json.Marshal(responseData)
 		w.Write([]byte("Ссылка не найдена"))
 		return
 	}
 	w.Header().Set("Content-Type", "text/plain")
 	w.Header().Set("Location", redirectTo)
 	w.WriteHeader(http.StatusTemporaryRedirect)
+	return
 }
 
 func URLRouter(cfg *config.Config, urlService service.URLServiceInterface) chi.Router {

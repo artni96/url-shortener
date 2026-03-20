@@ -12,7 +12,7 @@ var ErrURLIDDuplicate = errors.New("найден в БД")
 var ErrURLNotFound = errors.New("url not found")
 
 type URLRepositoryInterface interface {
-	GetByID(urlID string) (string, error)
+	GetByID(urlID string) (model.URLEntity, error)
 	Create(urlStr, urlID string) (model.URLEntity, error)
 }
 type LocalURLRepository struct {
@@ -41,23 +41,23 @@ func (repo *LocalURLRepository) Create(urlStr, urlID string) (model.URLEntity, e
 	return newEntity, nil
 }
 
-func (repo *LocalURLRepository) GetByID(urlID string) (string, error) {
+func (repo *LocalURLRepository) GetByID(urlID string) (model.URLEntity, error) {
 	repo.mu.RLock()
 	defer repo.mu.RUnlock()
 	return repo.GetByIDUnlocked(urlID)
 }
 
-func (repo *LocalURLRepository) GetByIDUnlocked(urlID string) (string, error) {
+func (repo *LocalURLRepository) GetByIDUnlocked(urlID string) (model.URLEntity, error) {
 	if len(repo.urls) == 0 {
-		return "", ErrURLNotFound
+		return model.URLEntity{}, ErrURLNotFound
 	}
 
 	for _, entity := range repo.urls {
 		if entity.ShortURL == urlID {
-			return entity.OriginalURL, nil
+			return entity, nil
 		}
 	}
-	return "", fmt.Errorf("%s %w", urlID, ErrURLNotFound)
+	return model.URLEntity{}, fmt.Errorf("%s %w", urlID, ErrURLNotFound)
 }
 
 func NewURLRepository() *LocalURLRepository {
