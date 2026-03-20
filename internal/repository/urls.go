@@ -16,8 +16,7 @@ type URLRepositoryInterface interface {
 	Create(urlStr, urlID string) (model.URLEntity, error)
 }
 type LocalURLRepository struct {
-	mu sync.RWMutex
-	//urls map[string]string
+	mu   sync.RWMutex
 	urls []model.URLEntity
 }
 
@@ -65,11 +64,11 @@ func NewURLRepository() *LocalURLRepository {
 }
 
 func getLastID(storage []model.URLEntity) int {
-	lastID := 0
+	lastID := -1
 	for _, lineVal := range storage {
 		if lineVal.ID > lastID {
 			lastID = lineVal.ID
 		}
 	}
-	return lastID
+	return lastID + 1
 }

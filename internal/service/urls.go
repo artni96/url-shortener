@@ -2,11 +2,13 @@ package service
 
 import (
 	"bufio"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 
 	"github.com/artni96/url-shortener/internal/logger"
+	"github.com/artni96/url-shortener/internal/model"
 	"github.com/artni96/url-shortener/internal/repository"
 	"github.com/artni96/url-shortener/internal/utility"
 )
@@ -47,6 +49,17 @@ func (s *URLService) Create(urlStr string) (string, error) {
 				return "", err
 			}
 		}
+		filename := "test.json"
+		fileWriter, err := NewWriter(filename)
+		if err != nil {
+			return "", err
+		}
+		defer fileWriter.Close()
+
+		err = fileWriter.WriteObject(&resp)
+		if err != nil {
+			return "", err
+		}
 		return resp.ShortURL, nil
 	}
 	return "", fmt.Errorf("%w %s", ErrFailedToCreated, urlStr)
@@ -57,8 +70,8 @@ func NewURLService(repo repository.URLRepositoryInterface) *URLService {
 }
 
 type Writer struct {
-	file    *os.File
-	scanner *bufio.Writer
+	file   *os.File
+	writer *bufio.Writer
 }
 
 func NewWriter(filename string) (*Writer, error) {
@@ -66,9 +79,25 @@ func NewWriter(filename string) (*Writer, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Writer{file: file, scanner: bufio.NewWriter(file)}, nil
+	return &Writer{file: file, writer: bufio.NewWriter(file)}, nil
 }
 
-func (w *Writer) WriteObject(urlStr string) error {
-	return nil
+func (w *Writer) WriteObject(urlEntity *model.URLEntity) error {
+	data, err := json.Marshal(&urlEntity)
+	if err != nil {
+		return err
+	}
+
+	if _, err := w.writer.Write(data); err != nil {
+		return err
+	}
+
+	if ere := w.writer.WriteByte('\n'); ere != nil {
+		return err
+	}
+	return w.writer.Flush()
+}
+
+func (w *Writer) Close() error {
+	return w.file.Close()
 }

@@ -138,7 +138,6 @@ func (h *URLHandler) GetURLHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain")
 	w.Header().Set("Location", redirectTo)
 	w.WriteHeader(http.StatusTemporaryRedirect)
-	return
 }
 
 func URLRouter(cfg *config.Config, urlService service.URLServiceInterface) chi.Router {
