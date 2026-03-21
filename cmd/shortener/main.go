@@ -30,10 +30,10 @@ func run(cfg *config.Config) error {
 		return err
 	}
 
-	_ = data.UploadFileData(cfg.FileStoragePath, urlRepository)
-	//if err != nil {
-	//	return err
-	//}
+	err := data.UploadFileData(cfg.FileStoragePath, urlRepository)
+	if err != nil {
+		return err
+	}
 	logger.Logger.Infof("Starting server at %s", cfg.ServerAddress)
 	return http.ListenAndServe(cfg.ServerAddress, urlHandler)
 }
