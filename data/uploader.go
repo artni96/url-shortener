@@ -45,7 +45,12 @@ func (r *Reader) CollectData() ([]model.URLEntity, error) {
 
 func UploadFileData(filepath string, repo *repository.LocalURLRepository) error {
 	fileReader, err := NewReader(filepath)
-	defer fileReader.Close()
+	defer func(fileReader *Reader) {
+		err := fileReader.Close()
+		if err != nil {
+
+		}
+	}(fileReader)
 
 	if err != nil {
 		logger.Logger.Fatal(err.Error())
