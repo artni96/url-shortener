@@ -10,6 +10,7 @@ type Config struct {
 	ResponseURL     string `env:"BASE_URL"`
 	DebugLevel      string `env:"DEBUG_LEVEL"`
 	FileStoragePath string `env:"FILE_STORAGE_PATH"`
+	Mode            string `env:"MODE"`
 }
 
 func ParseFlags() (*Config, error) {
@@ -19,6 +20,7 @@ func ParseFlags() (*Config, error) {
 	fs.StringVar(&conf.ResponseURL, "b", "http://localhost:8080", "response URL")
 	fs.StringVar(&conf.FileStoragePath, "f", "./data/local_storage.json", "file storage path")
 	fs.StringVar(&conf.DebugLevel, "debug", "Info", "debug level")
+	fs.StringVar(&conf.Mode, "mode", "dev", "mode")
 
 	err := fs.Parse(os.Args[1:])
 	if err != nil {

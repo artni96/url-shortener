@@ -18,9 +18,10 @@ func TestShortenURL(t *testing.T) {
 	cfg := config.Config{
 		ServerAddress: "localhost:8080",
 		ResponseURL:   "http://localhost:8080",
+		Mode:          "test",
 	}
 	urlRepo := repository.NewURLRepository()
-	urlService := service.NewURLService(urlRepo)
+	urlService := service.NewURLService(urlRepo, &cfg)
 	h := NewURLHandler(&cfg, urlService)
 
 	type want struct {
@@ -98,9 +99,10 @@ func TestCreateURLHandler(t *testing.T) {
 	cfg := config.Config{
 		ServerAddress: "localhost:8080",
 		ResponseURL:   "http://localhost:8080",
+		Mode:          "test",
 	}
 	urlRepo := repository.NewURLRepository()
-	urlService := service.NewURLService(urlRepo)
+	urlService := service.NewURLService(urlRepo, &cfg)
 	h := NewURLHandler(&cfg, urlService)
 
 	type want struct {
@@ -169,9 +171,10 @@ func TestGetURLHandler(t *testing.T) {
 	cfg := config.Config{
 		ServerAddress: "localhost:8080",
 		ResponseURL:   "http://localhost:8080",
+		Mode:          "test",
 	}
 	urlRepo := repository.NewURLRepository()
-	urlService := service.NewURLService(urlRepo)
+	urlService := service.NewURLService(urlRepo, &cfg)
 	h := NewURLHandler(&cfg, urlService)
 	type request struct {
 		method string

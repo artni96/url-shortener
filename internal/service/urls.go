@@ -51,23 +51,27 @@ func (s *URLService) Create(urlStr string) (string, error) {
 				return "", err
 			}
 		}
-		fileWriter, err := NewWriter(s.cfg.FileStoragePath)
-		if err != nil {
-			return "", err
-		}
-		defer fileWriter.Close()
+		if s.cfg.Mode != "test" {
+			fileWriter, err := NewWriter(s.cfg.FileStoragePath)
+			if err != nil {
+				return "", err
+			}
+			defer fileWriter.Close()
 
-		err = fileWriter.WriteObject(&resp)
-		if err != nil {
-			return "", err
+			err = fileWriter.WriteEntity(&resp)
+			if err != nil {
+				return "", err
+			}
 		}
 		return resp.ShortURL, nil
 	}
 	return "", fmt.Errorf("%w %s", ErrFailedToCreated, urlStr)
 }
 
-func NewURLService(repo repository.URLRepositoryInterface, cfg config.Config) *URLService {
-	return &URLService{repo: repo, cfg: &cfg}
+func NewURLService(repo repository.URLRepositoryInterface, cfg *config.Config) *URLService {
+	return &URLService{
+		repo: repo, cfg: cfg,
+	}
 }
 
 type Writer struct {
@@ -83,7 +87,7 @@ func NewWriter(filename string) (*Writer, error) {
 	return &Writer{file: file, writer: bufio.NewWriter(file)}, nil
 }
 
-func (w *Writer) WriteObject(urlEntity *model.URLEntity) error {
+func (w *Writer) WriteEntity(urlEntity *model.URLEntity) error {
 	data, err := json.Marshal(&urlEntity)
 	if err != nil {
 		return err
@@ -101,62 +105,4 @@ func (w *Writer) WriteObject(urlEntity *model.URLEntity) error {
 
 func (w *Writer) Close() error {
 	return w.file.Close()
-}
-
-type Reader struct {
-	file    *os.File
-	scanner *bufio.Scanner
-}
-
-func NewReader(filename string) (*Reader, error) {
-	file, err := os.OpenFile(filename, os.O_RDONLY|os.O_CREATE, 0666)
-	if err != nil {
-		return nil, err
-	}
-	return &Reader{file: file, scanner: bufio.NewScanner(file)}, nil
-}
-
-func (r *Reader) Close() error {
-	return r.file.Close()
-}
-
-func (r *Reader) ReadAllObjects() ([]model.URLEntity, error) {
-	var result []model.URLEntity
-	for r.scanner.Scan() {
-
-		data := r.scanner.Bytes()
-
-		object := model.URLEntity{}
-		if err := json.Unmarshal(data, &object); err != nil {
-			return nil, err
-		}
-		result = append(result, object)
-	}
-	return result, nil
-}
-
-func (s *URLService) BulkCreate(filepath string) error {
-	fileReader, err := NewReader(filepath)
-	defer func(fileReader *Reader) {
-		err := fileReader.Close()
-		if err != nil {
-
-		}
-	}(fileReader)
-
-	if err != nil {
-		return err
-	}
-	result, err := fileReader.ReadAllObjects()
-	if err != nil {
-		return err
-	}
-	for _, object := range result {
-		err := s.repo.UploadURL(object)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
 }

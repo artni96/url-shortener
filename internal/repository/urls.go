@@ -78,7 +78,7 @@ func getLastID(storage []model.URLEntity) int {
 func (repo *LocalURLRepository) UploadURL(urlEntity model.URLEntity) error {
 	repo.mu.Lock()
 	defer repo.mu.Unlock()
-	_, err := repo.GetByIDUnlocked(string(urlEntity.ID))
+	_, err := repo.GetByIDUnlocked(string(rune(urlEntity.ID)))
 	if err != nil {
 		if errors.Is(err, ErrURLNotFound) {
 			repo.urls = append(repo.urls, urlEntity)
