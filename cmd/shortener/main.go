@@ -3,6 +3,7 @@ package main
 import (
 	"net/http"
 
+	"github.com/artni96/url-shortener/data"
 	"github.com/artni96/url-shortener/internal/config"
 	"github.com/artni96/url-shortener/internal/handler/urls"
 	"github.com/artni96/url-shortener/internal/logger"
@@ -24,7 +25,13 @@ func run(cfg *config.Config) error {
 	urlRepository := repository.NewURLRepository()
 	urlService := service.NewURLService(urlRepository, cfg)
 	urlHandler := urls.URLRouter(cfg, urlService)
+
 	if err := logger.InitLogger(cfg.DebugLevel); err != nil {
+		return err
+	}
+
+	err := data.UploadFileData(cfg.FileStoragePath, urlRepository)
+	if err != nil {
 		return err
 	}
 	logger.Logger.Infof("Starting server at %s", cfg.ServerAddress)
