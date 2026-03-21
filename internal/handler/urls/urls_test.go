@@ -70,7 +70,7 @@ func TestShortenURL(t *testing.T) {
 			want: want{
 				contentType: "application/json",
 				status:      http.StatusBadRequest,
-				message:     `{"error":"invalid request - no body"}`,
+				message:     `{"error":"invalid request - empty body"}`,
 			},
 		},
 	}

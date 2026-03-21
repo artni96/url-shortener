@@ -27,6 +27,6 @@ func run(cfg *config.Config) error {
 	if err := logger.InitLogger(cfg.DebugLevel); err != nil {
 		return err
 	}
-	logger.Logger.Infof("Starting server at address %s", cfg.ServerAddress)
+	logger.Logger.Infof("Starting server at %s", cfg.ServerAddress)
 	return http.ListenAndServe(cfg.ServerAddress, urlHandler)
 }

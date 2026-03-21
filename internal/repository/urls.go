@@ -8,9 +8,8 @@ import (
 	"github.com/artni96/url-shortener/internal/model"
 )
 
-var ErrURLIDDuplicate = errors.New("найден в БД")
-var ErrURLNotFound = errors.New("url not found")
 var ErrURLAlreadyExists = errors.New("url already exists")
+var ErrURLNotFound = errors.New("url not found")
 
 type URLRepositoryInterface interface {
 	GetByID(urlID string) (model.URLEntity, error)
@@ -82,7 +81,9 @@ func (repo *LocalURLRepository) UploadURL(urlEntity model.URLEntity) error {
 	if err != nil {
 		if errors.Is(err, ErrURLNotFound) {
 			repo.urls = append(repo.urls, urlEntity)
+		} else {
+			return errors.New(ErrURLAlreadyExists.Error())
 		}
 	}
-	return errors.New(ErrURLIDDuplicate.Error())
+	return nil
 }

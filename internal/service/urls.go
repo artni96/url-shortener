@@ -14,7 +14,7 @@ import (
 	"github.com/artni96/url-shortener/internal/utility"
 )
 
-var ErrFailedToCreated = errors.New("не удалось создать ссылку для")
+var ErrFailedToCreated = errors.New("could not create ShortURL")
 
 type URLServiceInterface interface {
 	GetByID(urlID string) (string, error)
@@ -43,11 +43,11 @@ func (s *URLService) Create(urlStr string) (string, error) {
 		}
 		resp, err := s.repo.Create(urlStr, urlID)
 		if err != nil {
-			if errors.Is(err, repository.ErrURLIDDuplicate) {
+			if errors.Is(err, repository.ErrURLAlreadyExists) {
 				logger.Logger.Infof("urlID creation, attempt №%d\n", i)
 				continue
 			} else {
-				logger.Logger.Errorf("не удалось создать короткую ссылку для %s\n", urlStr)
+				logger.Logger.Errorf("could not manage to create a short url for %s\n", urlStr)
 				return "", err
 			}
 		}

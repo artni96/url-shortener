@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 
+	"github.com/artni96/url-shortener/internal/logger"
 	"github.com/artni96/url-shortener/internal/model"
 	"github.com/artni96/url-shortener/internal/repository"
 )
@@ -46,7 +47,7 @@ func UploadFileData(filepath string, repo *repository.LocalURLRepository) error 
 	defer func(fileReader *Reader) {
 		err := fileReader.Close()
 		if err != nil {
-
+			logger.Logger.Error(err)
 		}
 	}(fileReader)
 

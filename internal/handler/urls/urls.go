@@ -42,13 +42,13 @@ func (h *URLHandler) ShortenURLHandler(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	if err != nil {
-		errMessage := "invalid request - no body"
+		errMessage := "invalid request - empty body"
 		ErrorResponse(w, errMessage)
 		return
 	}
 
 	if err = json.Unmarshal(buf.Bytes(), &body); err != nil {
-		errMessage := "invalid request - no body"
+		errMessage := "invalid request - empty body"
 		ErrorResponse(w, errMessage)
 		return
 	}
@@ -90,7 +90,7 @@ func (h *URLHandler) CreateURLHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil && err.Error() != "EOF" {
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Не получается получить тело запроса"))
+		w.Write([]byte("Could not read request body"))
 		return
 	}
 
@@ -98,14 +98,14 @@ func (h *URLHandler) CreateURLHandler(w http.ResponseWriter, r *http.Request) {
 	if urlStr == "" {
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Пустое тело запроса"))
+		w.Write([]byte("Empty request body"))
 		return
 	}
 
 	if !isURLCorrect(urlStr) {
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("В тело запроса передан некорректный url"))
+		w.Write([]byte("Incorrect request body"))
 		return
 	}
 
@@ -118,7 +118,7 @@ func (h *URLHandler) CreateURLHandler(w http.ResponseWriter, r *http.Request) {
 		} else {
 			w.Header().Set("Content-Type", "text/plain")
 			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte("Не удалось обработать запрос"))
+			w.Write([]byte("Could not handle the request"))
 		}
 	}
 	w.Header().Set("Content-Type", "text/plain")
@@ -132,7 +132,7 @@ func (h *URLHandler) GetURLHandler(w http.ResponseWriter, r *http.Request) {
 	redirectTo, err := h.urlService.GetByID(strings.TrimPrefix(r.URL.Path, "/"))
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Ссылка не найдена"))
+		w.Write([]byte("URL not found"))
 		return
 	}
 	w.Header().Set("Content-Type", "text/plain")
@@ -153,7 +153,7 @@ func URLRouter(cfg *config.Config, urlService service.URLServiceInterface) chi.R
 	r.Route("/", func(r chi.Router) {
 		r.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte(fmt.Sprintf("Метод %s запрещен", r.Method)))
+			w.Write([]byte(fmt.Sprintf("Method %s is forbidden", r.Method)))
 		})
 		r.Post("/", urlHandler.CreateURLHandler)
 		r.Post("/api/shorten", urlHandler.ShortenURLHandler)
