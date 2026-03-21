@@ -3,6 +3,7 @@ package data
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"os"
 
 	"github.com/artni96/url-shortener/internal/logger"
@@ -16,9 +17,9 @@ type Reader struct {
 }
 
 func NewReader(filename string) (*Reader, error) {
-	file, err := os.OpenFile(filename, os.O_RDONLY|os.O_CREATE, 0666)
+	file, err := os.OpenFile(filename, os.O_RDONLY, 0)
 	if err != nil {
-		return nil, err
+		return nil, errors.New("file " + filename + " not found")
 	}
 	return &Reader{file: file, scanner: bufio.NewScanner(file)}, nil
 }
@@ -44,23 +45,21 @@ func (r *Reader) CollectData() ([]model.URLEntity, error) {
 
 func UploadFileData(filepath string, repo *repository.LocalURLRepository) error {
 	fileReader, err := NewReader(filepath)
-	defer func(fileReader *Reader) {
-		err := fileReader.Close()
-		if err != nil {
-			logger.Logger.Error(err)
-		}
-	}(fileReader)
+	defer fileReader.Close()
 
 	if err != nil {
+		logger.Logger.Fatal(err.Error())
 		return err
 	}
 	result, err := fileReader.CollectData()
 	if err != nil {
+		logger.Logger.Fatal(err.Error())
 		return err
 	}
 	for _, object := range result {
 		err := repo.UploadURL(object)
 		if err != nil {
+			logger.Logger.Fatal(err.Error())
 			return err
 		}
 	}
