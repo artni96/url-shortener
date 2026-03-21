@@ -48,7 +48,7 @@ func UploadFileData(filepath string, repo *repository.LocalURLRepository) error 
 	defer func(fileReader *Reader) {
 		err := fileReader.Close()
 		if err != nil {
-
+			logger.Logger.Error(err.Error())
 		}
 	}(fileReader)
 
