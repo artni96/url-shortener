@@ -25,24 +25,39 @@ func ParseFlags() (*Config, error) {
 		return nil, err
 	}
 
-	envServerAddress, ok := os.LookupEnv("SERVER_ADDRESS")
-	if ok {
+	//envServerAddress, ok := os.LookupEnv("SERVER_ADDRESS")
+	//if ok {
+	//	conf.ServerAddress = envServerAddress
+	//}
+	//
+	//envBaseURL, ok := os.LookupEnv("BASE_URL")
+	//if ok {
+	//	conf.ServerAddress = envBaseURL
+	//}
+	//
+	//envDebugLevel, ok := os.LookupEnv("DEBUG_LEVEL")
+	//if ok {
+	//	conf.DebugLevel = envDebugLevel
+	//}
+	//
+	//envFileStorePath, ok := os.LookupEnv("FILE_STORAGE_PATH")
+	//if ok {
+	//	conf.FileStoragePath = envFileStorePath
+	//}
+	if envServerAddress := os.Getenv("SERVER_ADDRESS"); envServerAddress != "" {
 		conf.ServerAddress = envServerAddress
 	}
 
-	envBaseURL, ok := os.LookupEnv("BASE_URL")
-	if ok {
-		conf.ServerAddress = envBaseURL
+	if envBaseURL := os.Getenv("BASE_URL"); envBaseURL != "" {
+		conf.ResponseURL = envBaseURL
 	}
 
-	envDebugLevel, ok := os.LookupEnv("DEBUG_LEVEL")
-	if ok {
+	if envDebugLevel := os.Getenv("DEBUG_LEVEL"); envDebugLevel != "" {
 		conf.DebugLevel = envDebugLevel
 	}
 
-	envFileStorePath, ok := os.LookupEnv("FILE_STORAGE_PATH")
-	if ok {
-		conf.FileStoragePath = envFileStorePath
+	if envFileStoragePath := os.Getenv("FILE_STORAGE_PATH"); envFileStoragePath != "" {
+		conf.FileStoragePath = envFileStoragePath
 	}
 
 	return &conf, nil

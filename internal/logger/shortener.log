@@ -35,3 +35,30 @@
 {"L":"INFO","T":"2026-03-24T01:58:48.081+0300","C":"logger/logger.go:80","M":"Request done","URI":"/x5sh77TxwE","method":"GET","duration":55625,"response_status":307,"response_size":23}
 {"L":"INFO","T":"2026-03-24T01:59:02.434+0300","C":"shortener/main.go:37","M":"Starting server","server address":"localhost:8080"}
 {"L":"INFO","T":"2026-03-24T01:59:07.207+0300","C":"logger/logger.go:80","M":"Request done","URI":"/x5sh77TxwE","method":"GET","duration":165334,"response_status":307,"response_size":23}
+{"L":"INFO","T":"2026-03-24T02:01:47.139+0300","C":"shortener/main.go:37","M":"Starting server","server address":"localhost:8080"}
+{"L":"INFO","T":"2026-03-24T02:01:54.304+0300","C":"logger/logger.go:80","M":"Request done","URI":"/x5sh77TxwEd","method":"GET","duration":447291,"response_status":400,"response_size":37}
+{"L":"INFO","T":"2026-03-24T02:01:57.717+0300","C":"logger/logger.go:80","M":"Request done","URI":"/x5sh77TxwE","method":"GET","duration":110584,"response_status":307,"response_size":23}
+{"L":"INFO","T":"2026-03-24T02:04:10.507+0300","C":"shortener/main.go:37","M":"Starting server","server address":"localhost:8080"}
+{"L":"INFO","T":"2026-03-24T02:04:27.368+0300","C":"shortener/main.go:37","M":"Starting server","server address":"localhost:8080"}
+{"L":"INFO","T":"2026-03-24T02:06:42.470+0300","C":"shortener/main.go:37","M":"Starting server","server address":"localhost:8081"}
+{"L":"INFO","T":"2026-03-24T02:06:50.204+0300","C":"logger/logger.go:80","M":"Request done","URI":"/x5sh77TxwE","method":"GET","duration":194625,"response_status":307,"response_size":23}
+{"L":"INFO","T":"2026-03-24T02:07:27.694+0300","C":"shortener/main.go:37","M":"Starting server","server address":"localhost:8080"}
+{"L":"INFO","T":"2026-03-24T02:07:37.042+0300","C":"shortener/main.go:37","M":"Starting server","server address":"localhost:8082"}
+{"L":"INFO","T":"2026-03-24T02:07:59.137+0300","C":"shortener/main.go:37","M":"Starting server","server address":"localhost:8082"}
+{"L":"INFO","T":"2026-03-24T02:08:22.572+0300","C":"shortener/main.go:37","M":"Starting server","server address":"localhost:8080"}
+{"L":"INFO","T":"2026-03-24T02:09:18.124+0300","C":"shortener/main.go:37","M":"Starting server","server address":"localhost:8080"}
+{"L":"INFO","T":"2026-03-24T02:10:58.691+0300","C":"shortener/main.go:37","M":"Starting server","server address":"localhost:8080"}
+{"L":"INFO","T":"2026-03-24T02:11:08.346+0300","C":"shortener/main.go:37","M":"Starting server","server address":"localhost:8080"}
+{"L":"INFO","T":"2026-03-24T02:11:26.300+0300","C":"shortener/main.go:37","M":"Starting server","server address":"localhost:8082"}
+{"L":"INFO","T":"2026-03-24T02:12:44.998+0300","C":"shortener/main.go:37","M":"Starting server","server address":"localhost:8082"}
+{"L":"INFO","T":"2026-03-24T02:13:11.429+0300","C":"shortener/main.go:37","M":"Starting server","server address":"localhost:8082"}
+{"L":"INFO","T":"2026-03-24T02:13:55.717+0300","C":"shortener/main.go:37","M":"Starting server","server address":"localhost:8082"}
+{"L":"INFO","T":"2026-03-24T02:14:21.090+0300","C":"shortener/main.go:37","M":"Starting server","server address":"localhost:8082"}
+{"L":"INFO","T":"2026-03-24T02:18:20.146+0300","C":"shortener/main.go:37","M":"Starting server","server address":"localhost:8082"}
+{"L":"INFO","T":"2026-03-24T02:19:17.641+0300","C":"shortener/main.go:37","M":"Starting server","server address":"localhost:8082"}
+{"L":"INFO","T":"2026-03-24T02:19:48.761+0300","C":"shortener/main.go:37","M":"Starting server","server address":"localhost:8081"}
+{"L":"INFO","T":"2026-03-24T02:20:03.786+0300","C":"shortener/main.go:37","M":"Starting server","server address":"localhost:8082"}
+{"L":"INFO","T":"2026-03-24T02:20:10.466+0300","C":"shortener/main.go:37","M":"Starting server","server address":"localhost:8081"}
+{"L":"INFO","T":"2026-03-24T02:20:14.140+0300","C":"shortener/main.go:37","M":"Starting server","server address":"localhost:8080"}
+{"L":"INFO","T":"2026-03-24T02:20:42.321+0300","C":"shortener/main.go:37","M":"Starting server","server address":"localhost:8082"}
+{"L":"INFO","T":"2026-03-24T02:22:06.098+0300","C":"shortener/main.go:37","M":"Starting server","server address":"localhost:8082"}
