@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"os"
 
-	"github.com/artni96/url-shortener/internal/logger"
 	"github.com/artni96/url-shortener/internal/model"
 	"github.com/artni96/url-shortener/internal/repository"
+	"go.uber.org/zap"
 )
 
 type Reader struct {
@@ -42,28 +42,30 @@ func (r *Reader) CollectData() ([]model.URLEntity, error) {
 	return result, nil
 }
 
-func UploadFileData(filepath string, repo *repository.LocalURLRepository) error {
+func UploadFileData(filepath string, repo *repository.LocalURLRepository, log *zap.Logger) error {
 	fileReader, err := NewReader(filepath)
 	defer func(fileReader *Reader) {
 		err := fileReader.Close()
 		if err != nil {
-			logger.Logger.Fatal(err)
+			log.Fatal("",
+				zap.Error(err),
+			)
 		}
 	}(fileReader)
 
 	if err != nil {
-		logger.Logger.Fatal(err.Error())
+		log.Fatal(err.Error())
 		return err
 	}
 	result, err := fileReader.CollectData()
 	if err != nil {
-		logger.Logger.Fatal(err.Error())
+		log.Fatal(err.Error())
 		return err
 	}
 	for _, object := range result {
-		err := repo.UploadURL(object)
+		err := repo.SaveURL(object)
 		if err != nil {
-			logger.Logger.Fatal(err.Error())
+			log.Fatal(err.Error())
 			return err
 		}
 	}

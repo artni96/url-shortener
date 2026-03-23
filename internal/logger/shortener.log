@@ -10,3 +10,4 @@
 {"L":"INFO","T":"2026-03-21T12:45:37.076+0300","C":"shortener/main.go:37","M":"Starting server at localhost:8080"}
 {"L":"INFO","T":"2026-03-21T12:48:56.113+0300","C":"shortener/main.go:37","M":"Starting server at localhost:8080"}
 {"L":"INFO","T":"2026-03-21T12:48:58.724+0300","C":"logger/logger.go:81","M":"uri /BT0rpmgPi9 method GET duration 172.042µs response_status 307 response_size 23"}
+{"L":"INFO","T":"2026-03-23T17:50:06.708+0300","C":"shortener/main.go:39","M":"Starting server","server address":"localhost:8080"}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"net/http"
 
 	"github.com/artni96/url-shortener/data"
@@ -9,31 +10,34 @@ import (
 	"github.com/artni96/url-shortener/internal/logger"
 	"github.com/artni96/url-shortener/internal/repository"
 	"github.com/artni96/url-shortener/internal/service"
+	"go.uber.org/zap"
 )
 
 func main() {
 	cfg, err := config.ParseFlags()
 	if err != nil {
-		logger.Logger.Fatal(err.Error())
+		log.Fatal(err.Error())
 	}
 	if err = run(cfg); err != nil {
-		logger.Logger.Fatal(err.Error())
+		log.Fatal(err.Error())
 	}
 }
 
 func run(cfg *config.Config) error {
-	urlRepository := repository.NewURLRepository()
-	urlService := service.NewURLService(urlRepository, cfg)
-	urlHandler := urls.URLRouter(cfg, urlService)
-
-	if err := logger.InitLogger(cfg.DebugLevel); err != nil {
-		return err
-	}
-
-	err := data.UploadFileData(cfg.FileStoragePath, urlRepository)
+	projectLogger, err := logger.InitLogger(cfg.DebugLevel)
 	if err != nil {
 		return err
 	}
-	logger.Logger.Infof("Starting server at %s", cfg.ServerAddress)
+	urlRepository := repository.NewURLRepository()
+	urlService := service.NewURLService(urlRepository, cfg)
+	urlHandler := urls.URLRouter(cfg, urlService, projectLogger)
+
+	err = data.UploadFileData(cfg.FileStoragePath, urlRepository, projectLogger)
+	if err != nil {
+		return err
+	}
+	projectLogger.Info("Starting server",
+		zap.String("server address", cfg.ServerAddress),
+	)
 	return http.ListenAndServe(cfg.ServerAddress, urlHandler)
 }

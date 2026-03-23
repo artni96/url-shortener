@@ -14,7 +14,7 @@ var ErrURLNotFound = errors.New("url not found")
 type URLRepositoryInterface interface {
 	GetByID(urlID string) (model.URLEntity, error)
 	Create(urlStr, urlID string) (model.URLEntity, error)
-	UploadURL(url model.URLEntity) error
+	SaveURL(url model.URLEntity) error
 }
 type LocalURLRepository struct {
 	mu   sync.RWMutex
@@ -25,7 +25,7 @@ func (repo *LocalURLRepository) Create(urlStr, urlID string) (model.URLEntity, e
 	repo.mu.Lock()
 	defer repo.mu.Unlock()
 
-	_, err := repo.GetByIDUnlocked(urlID)
+	_, err := repo.getByIDUnlocked(urlID)
 	newEntity := model.URLEntity{}
 	if err != nil {
 		if !errors.Is(err, ErrURLNotFound) {
@@ -44,10 +44,10 @@ func (repo *LocalURLRepository) Create(urlStr, urlID string) (model.URLEntity, e
 func (repo *LocalURLRepository) GetByID(urlID string) (model.URLEntity, error) {
 	repo.mu.RLock()
 	defer repo.mu.RUnlock()
-	return repo.GetByIDUnlocked(urlID)
+	return repo.getByIDUnlocked(urlID)
 }
 
-func (repo *LocalURLRepository) GetByIDUnlocked(urlID string) (model.URLEntity, error) {
+func (repo *LocalURLRepository) getByIDUnlocked(urlID string) (model.URLEntity, error) {
 	if len(repo.urls) == 0 {
 		return model.URLEntity{}, ErrURLNotFound
 	}
@@ -74,10 +74,10 @@ func getLastID(storage []model.URLEntity) int {
 	return lastID + 1
 }
 
-func (repo *LocalURLRepository) UploadURL(urlEntity model.URLEntity) error {
+func (repo *LocalURLRepository) SaveURL(urlEntity model.URLEntity) error {
 	repo.mu.Lock()
 	defer repo.mu.Unlock()
-	_, err := repo.GetByIDUnlocked(string(rune(urlEntity.ID)))
+	_, err := repo.getByIDUnlocked(string(rune(urlEntity.ID)))
 	if err != nil {
 		if errors.Is(err, ErrURLNotFound) {
 			repo.urls = append(repo.urls, urlEntity)

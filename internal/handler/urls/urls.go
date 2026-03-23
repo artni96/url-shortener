@@ -16,6 +16,7 @@ import (
 	"github.com/artni96/url-shortener/internal/service"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"go.uber.org/zap"
 )
 
 const urlPattern = `^https?:\/\/`
@@ -140,11 +141,11 @@ func (h *URLHandler) GetURLHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusTemporaryRedirect)
 }
 
-func URLRouter(cfg *config.Config, urlService service.URLServiceInterface) chi.Router {
+func URLRouter(cfg *config.Config, urlService service.URLServiceInterface, log *zap.Logger) chi.Router {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RealIP)
-	r.Use(logger.RequestLogger)
+	r.Use(logger.RequestLoggerMiddleware(log))
 	r.Use(middleware.Recoverer)
 	r.Use(config.GzipMiddleware)
 

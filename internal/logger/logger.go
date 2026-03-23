@@ -9,8 +9,6 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-var Logger *zap.SugaredLogger = zap.NewNop().Sugar()
-
 type (
 	responseData struct {
 		status int
@@ -34,7 +32,7 @@ func (r *loggingResponseWriter) WriteHeader(status int) {
 	r.responseData.status = status
 }
 
-func InitLogger(level string) error {
+func InitLogger(level string) (*zap.Logger, error) {
 	levelMap := map[string]zapcore.Level{
 		"debug": zapcore.DebugLevel,
 		"info":  zapcore.InfoLevel,
@@ -49,7 +47,7 @@ func InitLogger(level string) error {
 
 	logFile, err := os.OpenFile("./internal/logger/shortener.log", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	fileOut := zapcore.NewCore(fileEncoder, zapcore.AddSync(logFile), levelMap[level])
@@ -57,35 +55,37 @@ func InitLogger(level string) error {
 
 	loggerCore := zapcore.NewTee(fileOut, stdOut)
 	logger := zap.New(loggerCore, zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel))
-	sugar := logger.Sugar()
-	Logger = sugar
-	return nil
+	defer logger.Sync()
+
+	return logger, nil
 }
 
-func RequestLogger(h http.Handler) http.Handler {
-	logFn := func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
+func RequestLoggerMiddleware(logger *zap.Logger) func(h http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		logFn := func(w http.ResponseWriter, r *http.Request) {
+			start := time.Now()
 
-		responseData := &responseData{
-			status: 0,
-			size:   0,
+			responseData := &responseData{
+				status: 0,
+				size:   0,
+			}
+			lw := loggingResponseWriter{
+				ResponseWriter: w,
+				responseData:   responseData,
+			}
+			next.ServeHTTP(&lw, r)
+
+			duration := time.Since(start)
+
+			logger.Info("Request done",
+				zap.String("URI", r.RequestURI),
+				zap.String("method", r.Method),
+				zap.Int("duration", int(duration)),
+				zap.Int("response_status", responseData.status),
+				zap.Int("response_size", responseData.size),
+			)
+
 		}
-		lw := loggingResponseWriter{
-			ResponseWriter: w,
-			responseData:   responseData,
-		}
-		h.ServeHTTP(&lw, r)
-
-		duration := time.Since(start)
-
-		Logger.Infoln(
-			"uri", r.RequestURI,
-			"method", r.Method,
-			"duration", duration,
-			"response_status", responseData.status,
-			"response_size", responseData.size,
-		)
-
+		return http.HandlerFunc(logFn)
 	}
-	return http.HandlerFunc(logFn)
 }
