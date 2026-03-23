@@ -10,7 +10,6 @@ type Config struct {
 	ResponseURL     string `env:"BASE_URL"`
 	DebugLevel      string `env:"DEBUG_LEVEL"`
 	FileStoragePath string `env:"FILE_STORAGE_PATH"`
-	Mode            string `env:"MODE"`
 }
 
 func ParseFlags() (*Config, error) {
@@ -20,28 +19,31 @@ func ParseFlags() (*Config, error) {
 	fs.StringVar(&conf.ResponseURL, "b", "http://localhost:8080", "response URL")
 	fs.StringVar(&conf.FileStoragePath, "f", "./data/local_storage.json", "file storage path")
 	fs.StringVar(&conf.DebugLevel, "debug", "Info", "debug level")
-	fs.StringVar(&conf.Mode, "mode", "dev", "mode")
 
 	err := fs.Parse(os.Args[1:])
 	if err != nil {
 		return nil, err
 	}
 
-	if envServerAddress := os.Getenv("SERVER_ADDRESS"); envServerAddress != "" {
+	envServerAddress, ok := os.LookupEnv("SERVER_ADDRESS")
+	if ok {
 		conf.ServerAddress = envServerAddress
 	}
-	if envBaseURL := os.Getenv("BASE_URL"); envBaseURL != "" {
-		conf.ResponseURL = envBaseURL
+
+	envBaseURL, ok := os.LookupEnv("BASE_URL")
+	if ok {
+		conf.ServerAddress = envBaseURL
 	}
-	if envDebugLevel := os.Getenv("DEBUG_LEVEL"); envDebugLevel != "" {
+
+	envDebugLevel, ok := os.LookupEnv("DEBUG_LEVEL")
+	if ok {
 		conf.DebugLevel = envDebugLevel
 	}
-	if envFileStorePath := os.Getenv("FILE_STORAGE_PATH"); envFileStorePath != "" {
+
+	envFileStorePath, ok := os.LookupEnv("FILE_STORAGE_PATH")
+	if ok {
 		conf.FileStoragePath = envFileStorePath
 	}
-	return &conf, nil
-}
 
-func (conf *Config) UploadDB() string {
-	return conf.FileStoragePath
+	return &conf, nil
 }

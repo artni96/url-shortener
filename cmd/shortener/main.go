@@ -4,7 +4,6 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/artni96/url-shortener/data"
 	"github.com/artni96/url-shortener/internal/config"
 	"github.com/artni96/url-shortener/internal/handler/urls"
 	"github.com/artni96/url-shortener/internal/logger"
@@ -24,19 +23,18 @@ func main() {
 }
 
 func run(cfg *config.Config) error {
-	projectLogger, err := logger.InitLogger(cfg.DebugLevel)
+	appLogger, err := logger.InitLogger(cfg.DebugLevel)
 	if err != nil {
 		return err
 	}
-	urlRepository := repository.NewURLRepository()
+	urlRepository, err := repository.NewURLRepository(cfg, appLogger)
+	if err != nil {
+		return err
+	}
 	urlService := service.NewURLService(urlRepository, cfg)
-	urlHandler := urls.URLRouter(cfg, urlService, projectLogger)
+	urlHandler := urls.URLRouter(cfg, urlService, appLogger)
 
-	err = data.UploadFileData(cfg.FileStoragePath, urlRepository, projectLogger)
-	if err != nil {
-		return err
-	}
-	projectLogger.Info("Starting server",
+	appLogger.Info("Starting server",
 		zap.String("server address", cfg.ServerAddress),
 	)
 	return http.ListenAndServe(cfg.ServerAddress, urlHandler)

@@ -1,89 +1,203 @@
 package repository
 
 import (
+	"bufio"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"sync"
 
+	"github.com/artni96/url-shortener/internal/config"
 	"github.com/artni96/url-shortener/internal/model"
+	"go.uber.org/zap"
 )
 
 var ErrURLAlreadyExists = errors.New("url already exists")
 var ErrURLNotFound = errors.New("url not found")
 
 type URLRepositoryInterface interface {
-	GetByID(urlID string) (model.URLEntity, error)
-	Create(urlStr, urlID string) (model.URLEntity, error)
+	GetByShortURL(shortURL string) (string, error)
+	Create(originalURL, shortURL string) (model.URLEntity, error)
 	SaveURL(url model.URLEntity) error
 }
 type LocalURLRepository struct {
-	mu   sync.RWMutex
-	urls []model.URLEntity
+	mu sync.RWMutex
+	//urls []model.URLEntity
+	urls map[string]string
+	cfg  *config.Config
 }
 
-func (repo *LocalURLRepository) Create(urlStr, urlID string) (model.URLEntity, error) {
+func (repo *LocalURLRepository) Create(originalURL, shortURL string) (model.URLEntity, error) {
 	repo.mu.Lock()
 	defer repo.mu.Unlock()
 
-	_, err := repo.getByIDUnlocked(urlID)
-	newEntity := model.URLEntity{}
-	if err != nil {
-		if !errors.Is(err, ErrURLNotFound) {
-			return newEntity, err
-		}
-
+	if _, ok := repo.urls[originalURL]; ok {
+		return model.URLEntity{}, ErrURLAlreadyExists
 	}
-	curID := getLastID(repo.urls)
-	newEntity.ID = curID
-	newEntity.OriginalURL = urlStr
-	newEntity.ShortURL = urlID
-	repo.urls = append(repo.urls, newEntity)
-	return newEntity, nil
+
+	repo.urls[shortURL] = originalURL
+	entity := model.URLEntity{
+		OriginalURL: originalURL,
+		ShortURL:    shortURL,
+	}
+	return entity, nil
 }
 
-func (repo *LocalURLRepository) GetByID(urlID string) (model.URLEntity, error) {
+func (repo *LocalURLRepository) GetByShortURL(shortURL string) (string, error) {
 	repo.mu.RLock()
 	defer repo.mu.RUnlock()
-	return repo.getByIDUnlocked(urlID)
-}
-
-func (repo *LocalURLRepository) getByIDUnlocked(urlID string) (model.URLEntity, error) {
-	if len(repo.urls) == 0 {
-		return model.URLEntity{}, ErrURLNotFound
+	entity, ok := repo.urls[shortURL]
+	if !ok {
+		return "", ErrURLNotFound
 	}
-
-	for _, entity := range repo.urls {
-		if entity.ShortURL == urlID {
-			return entity, nil
-		}
-	}
-	return model.URLEntity{}, fmt.Errorf("%s %w", urlID, ErrURLNotFound)
+	return entity, nil
 }
 
-func NewURLRepository() *LocalURLRepository {
-	return &LocalURLRepository{urls: []model.URLEntity{}}
-}
+//func (repo *LocalURLRepository) getByIDUnlocked(urlID string) (model.URLEntity, error) {
+//	if len(repo.urls) == 0 {
+//		return model.URLEntity{}, ErrURLNotFound
+//	}
+//
+//	for _, entity := range repo.urls {
+//		if entity.ShortURL == urlID {
+//			return entity, nil
+//		}
+//	}
+//	return model.URLEntity{}, fmt.Errorf("%w: %s", ErrURLNotFound, urlID)
+//}
 
-func getLastID(storage []model.URLEntity) int {
-	lastID := -1
-	for _, lineVal := range storage {
-		if lineVal.ID > lastID {
-			lastID = lineVal.ID
-		}
-	}
-	return lastID + 1
-}
+//func getLastID(storage []model.URLEntity) int {
+//	lastID := -1
+//	for _, lineVal := range storage {
+//		if lineVal.ID > lastID {
+//			lastID = lineVal.ID
+//		}
+//	}
+//	return lastID + 1
+//}
 
 func (repo *LocalURLRepository) SaveURL(urlEntity model.URLEntity) error {
 	repo.mu.Lock()
 	defer repo.mu.Unlock()
-	_, err := repo.getByIDUnlocked(string(rune(urlEntity.ID)))
+	_, ok := repo.urls[urlEntity.ShortURL]
+	if ok {
+		return fmt.Errorf("%w: %s", ErrURLAlreadyExists, urlEntity.ShortURL)
+	}
+	repo.urls[urlEntity.ShortURL] = urlEntity.OriginalURL
+	return nil
+}
+
+type Writer struct {
+	file   *os.File
+	writer *bufio.Writer
+}
+
+func NewWriter(filename string) (*Writer, error) {
+	file, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		if errors.Is(err, ErrURLNotFound) {
-			repo.urls = append(repo.urls, urlEntity)
-		} else {
-			return errors.New(ErrURLAlreadyExists.Error())
+		return nil, fmt.Errorf("could open file: %w", err)
+	}
+	return &Writer{file: file, writer: bufio.NewWriter(file)}, nil
+}
+
+func (w *Writer) WriteEntity(urlEntity *model.URLEntity) error {
+	data, err := json.Marshal(&urlEntity)
+	if err != nil {
+		return fmt.Errorf("could not marshal entity: %w", err)
+	}
+
+	if _, err = w.writer.Write(data); err != nil {
+		return fmt.Errorf("could not write to file: %w", err)
+	}
+
+	if err = w.writer.WriteByte('\n'); err != nil {
+		return fmt.Errorf("could not write to file: %w", err)
+	}
+	defer w.Close()
+	return w.writer.Flush()
+}
+
+func (w *Writer) Close() error {
+	return w.file.Close()
+}
+
+type FileScanner struct {
+	file    *os.File
+	scanner *bufio.Scanner
+}
+
+func NewFileScanner(filename string) (*FileScanner, error) {
+	file, err := os.OpenFile(filename, os.O_RDONLY|os.O_CREATE, 0644)
+	if err != nil {
+		return nil, err
+	}
+	return &FileScanner{file: file, scanner: bufio.NewScanner(file)}, nil
+}
+
+func (s *FileScanner) Close() error {
+	return s.file.Close()
+}
+
+func (s *FileScanner) CollectData() ([]model.URLEntity, error) {
+	var result []model.URLEntity
+	for s.scanner.Scan() {
+
+		data := s.scanner.Bytes()
+
+		object := model.URLEntity{}
+		if err := json.Unmarshal(data, &object); err != nil {
+			return nil, err
+		}
+		result = append(result, object)
+	}
+	return result, nil
+}
+
+func (repo *LocalURLRepository) uploadLocalStorage(filepath string, log *zap.Logger) error {
+	fileReader, err := NewFileScanner(filepath)
+	defer func(fileReader *FileScanner) {
+		err := fileReader.Close()
+		if err != nil {
+			log.Error("could not close file reader",
+				zap.String("error", err.Error()),
+			)
+		}
+	}(fileReader)
+
+	if err != nil {
+		log.Error("could not initialize NewFileScanner",
+			zap.String("error", err.Error()))
+		return err
+	}
+	result, err := fileReader.CollectData()
+	if err != nil {
+		log.Error("could not collect data from file",
+			zap.String("filepath", filepath),
+			zap.String("error", err.Error()))
+		return err
+	}
+	for _, object := range result {
+		err := repo.SaveURL(object)
+		if err != nil {
+			log.Error("could not upload URL Entity to local storage",
+				zap.String("ShortURL", object.ShortURL),
+				zap.String("OriginalURL", object.OriginalURL))
+			return err
 		}
 	}
 	return nil
+}
+
+func NewURLRepository(cfg *config.Config, log *zap.Logger) (*LocalURLRepository, error) {
+	repo := LocalURLRepository{urls: make(map[string]string)}
+	err := repo.uploadLocalStorage(cfg.FileStoragePath, log)
+	if err != nil {
+		log.Error("could not upload data from the file",
+			zap.String("filepath", cfg.FileStoragePath),
+			zap.String("error", err.Error()))
+		return nil, err
+	}
+
+	return &repo, nil
 }

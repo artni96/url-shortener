@@ -1,14 +1,10 @@
 package service
 
 import (
-	"bufio"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 
 	"github.com/artni96/url-shortener/internal/config"
-	"github.com/artni96/url-shortener/internal/model"
 	"github.com/artni96/url-shortener/internal/repository"
 	"github.com/artni96/url-shortener/internal/utility"
 	"go.uber.org/zap"
@@ -17,7 +13,7 @@ import (
 var ErrFailedToCreated = errors.New("could not create ShortURL")
 
 type URLServiceInterface interface {
-	GetByID(urlID string) (string, error)
+	GetByShortURL(urlID string) (string, error)
 	Create(urlStr string) (string, error)
 }
 type URLService struct {
@@ -26,15 +22,15 @@ type URLService struct {
 	log  *zap.Logger
 }
 
-func (s *URLService) GetByID(urlID string) (string, error) {
-	resp, err := s.repo.GetByID(urlID)
+func (s *URLService) GetByShortURL(shortURL string) (string, error) {
+	originalURL, err := s.repo.GetByShortURL(shortURL)
 	if err != nil {
 		return "", err
 	}
-	return resp.OriginalURL, nil
+	return originalURL, nil
 }
 
-func (s *URLService) Create(urlStr string) (string, error) {
+func (s *URLService) Create(originalURL string) (string, error) {
 
 	for i := range 5 {
 		urlID, err := utility.GenerateID(10)
@@ -45,7 +41,7 @@ func (s *URLService) Create(urlStr string) (string, error) {
 			)
 			continue
 		}
-		resp, err := s.repo.Create(urlStr, urlID)
+		entity, err := s.repo.Create(originalURL, urlID)
 		if err != nil {
 			if errors.Is(err, repository.ErrURLAlreadyExists) {
 				s.log.Info(
@@ -56,13 +52,14 @@ func (s *URLService) Create(urlStr string) (string, error) {
 			} else {
 				s.log.Error(
 					"could not manage to create a short url for ",
-					zap.String("url", urlStr),
+					zap.String("url", originalURL),
 				)
 				return "", err
 			}
 		}
-		if s.cfg.Mode != "test" {
-			fileWriter, err := NewWriter(s.cfg.FileStoragePath)
+
+		if s.cfg.FileStoragePath != "" {
+			fileWriter, err := repository.NewWriter(s.cfg.FileStoragePath)
 			if err != nil {
 				s.log.Error("could not create file writer",
 					zap.String("path", s.cfg.FileStoragePath),
@@ -72,51 +69,19 @@ func (s *URLService) Create(urlStr string) (string, error) {
 			}
 			defer fileWriter.Close()
 
-			err = fileWriter.WriteEntity(&resp)
+			err = fileWriter.WriteEntity(&entity)
 			if err != nil {
 				return "", err
 			}
 		}
-		return resp.ShortURL, nil
+
+		return entity.ShortURL, nil
 	}
-	return "", fmt.Errorf("%w %s", ErrFailedToCreated, urlStr)
+	return "", fmt.Errorf("%w %s", ErrFailedToCreated, originalURL)
 }
 
 func NewURLService(repo repository.URLRepositoryInterface, cfg *config.Config) *URLService {
 	return &URLService{
 		repo: repo, cfg: cfg,
 	}
-}
-
-type Writer struct {
-	file   *os.File
-	writer *bufio.Writer
-}
-
-func NewWriter(filename string) (*Writer, error) {
-	file, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return nil, fmt.Errorf("could open file: %w", err)
-	}
-	return &Writer{file: file, writer: bufio.NewWriter(file)}, nil
-}
-
-func (w *Writer) WriteEntity(urlEntity *model.URLEntity) error {
-	data, err := json.Marshal(&urlEntity)
-	if err != nil {
-		return fmt.Errorf("could not marshal entity: %w", err)
-	}
-
-	if _, err = w.writer.Write(data); err != nil {
-		return fmt.Errorf("could not write to file: %w", err)
-	}
-
-	if err = w.writer.WriteByte('\n'); err != nil {
-		return fmt.Errorf("could not write to file: %w", err)
-	}
-	return w.writer.Flush()
-}
-
-func (w *Writer) Close() error {
-	return w.file.Close()
 }
