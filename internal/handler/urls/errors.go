@@ -14,13 +14,15 @@ type ErrorResponseStruct struct {
 func ErrorResponse(w http.ResponseWriter, errMessage string, statusCode int, logger *zap.Logger) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
-	errResp := ErrorResponseStruct{
-		Error: errMessage,
-	}
-	logger.Error(errMessage)
+
 	if statusCode >= 500 {
-		w.Write([]byte(`{"error": "invalid request"}`))
+		logger.Error(errMessage)
+		w.Write([]byte(`{"error": "Server error. Please try again."}`))
+
 	} else {
+		errResp := ErrorResponseStruct{
+			Error: errMessage,
+		}
 		resp, err := json.Marshal(errResp)
 		if err != nil {
 			w.Write([]byte(`{"error": "invalid request"}`))
