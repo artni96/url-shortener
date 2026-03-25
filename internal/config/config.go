@@ -44,21 +44,6 @@ func ParseFlags() (*Config, error) {
 	if ok {
 		conf.FileStoragePath = envFileStorePath
 	}
-	//if envServerAddress := os.Getenv("SERVER_ADDRESS"); envServerAddress != "" {
-	//	conf.ServerAddress = envServerAddress
-	//}
-	//
-	//if envBaseURL := os.Getenv("BASE_URL"); envBaseURL != "" {
-	//	conf.ResponseURL = envBaseURL
-	//}
-	//
-	//if envDebugLevel := os.Getenv("DEBUG_LEVEL"); envDebugLevel != "" {
-	//	conf.DebugLevel = envDebugLevel
-	//}
-	//
-	//if envFileStoragePath := os.Getenv("FILE_STORAGE_PATH"); envFileStoragePath != "" {
-	//	conf.FileStoragePath = envFileStoragePath
-	//}
 
 	return &conf, nil
 }
