@@ -33,7 +33,7 @@ func (s *URLService) GetByShortURL(shortURL string) (string, error) {
 func (s *URLService) Create(originalURL string) (string, error) {
 
 	for i := range 5 {
-		urlID, err := utility.GenerateID(10)
+		urlID, err := utility.GenerateShortURL(10)
 		if err != nil {
 			s.log.Info(
 				"urlID creation",
