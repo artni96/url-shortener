@@ -10,7 +10,6 @@ type URLCreateResponse struct {
 }
 
 type URLEntity struct {
-	//ID          int    `json:"id"`
 	OriginalURL string `json:"url"`
 	ShortURL    string `json:"short_url"`
 }
