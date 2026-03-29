@@ -6,11 +6,11 @@ import (
 	"fmt"
 )
 
-func GenerateID(length int) (string, error) {
+func GenerateShortURL(length int) (string, error) {
 	bytes := make([]byte, length)
 	_, err := rand.Read(bytes)
 	if err != nil {
-		return "", fmt.Errorf("данный urlID уже используется")
+		return "", fmt.Errorf("short url already exists")
 	}
 	resp := base64.URLEncoding.EncodeToString(bytes)[:length]
 	return resp, err

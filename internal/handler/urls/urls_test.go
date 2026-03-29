@@ -3,6 +3,7 @@ package urls
 import (
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -12,16 +13,113 @@ import (
 	"github.com/artni96/url-shortener/internal/service"
 	"github.com/artni96/url-shortener/internal/utility"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/zap"
 )
 
-func TestCreateURLHandler(t *testing.T) {
+func TestShortenURL(t *testing.T) {
+	tempDir := t.TempDir()
+	testFile := filepath.Join(tempDir, "data.json")
+	testLogger := zap.NewNop()
+
 	cfg := config.Config{
-		ServerAddress: "localhost:8080",
-		ResponseURL:   "http://localhost:8080",
+		ServerAddress:   "localhost:8080",
+		ResponseURL:     "http://localhost:8080",
+		FileStoragePath: testFile,
 	}
-	urlRepo := repository.NewURLRepository()
-	urlService := service.NewURLService(urlRepo)
-	h := NewURLHandler(&cfg, urlService)
+
+	urlRepo, err := repository.NewURLRepository(&cfg, testLogger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	urlService := service.NewURLService(urlRepo, &cfg)
+	h := NewURLHandler(&cfg, urlService, testLogger)
+
+	type want struct {
+		contentType string
+		status      int
+		message     string
+	}
+	type request struct {
+		body   string
+		method string
+	}
+	tests := []struct {
+		name    string
+		request request
+		want    want
+	}{
+		{
+			name: "success",
+			request: request{
+				body:   `{"url":"https://google.com"}`,
+				method: http.MethodPost,
+			},
+			want: want{
+				contentType: "application/json",
+				status:      http.StatusCreated,
+			},
+		},
+		{
+			name: "invalid url",
+			request: request{
+				body:   `{"url":"hhtps://google.com"}`,
+				method: http.MethodPost,
+			},
+			want: want{
+				contentType: "application/json",
+				status:      http.StatusBadRequest,
+				message:     `{"error":"url 'hhtps://google.com' is invalid"}`,
+			},
+		},
+		{
+			name: "empty body",
+			request: request{
+				body:   ``,
+				method: http.MethodPost,
+			},
+			want: want{
+				contentType: "application/json",
+				status:      http.StatusBadRequest,
+				message:     `{"error":"could not unmarshal request body"}`,
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reqBody := strings.NewReader(tt.request.body)
+
+			req := httptest.NewRequest(tt.request.method, "/api/shorten", reqBody)
+			w := httptest.NewRecorder()
+			h.ShortenURLHandler(w, req)
+			res := w.Result()
+
+			assert.Equal(t, tt.want.status, res.StatusCode)
+			assert.Equal(t, tt.want.contentType, res.Header.Get("Content-Type"))
+			if tt.want.status == http.StatusBadRequest {
+				assert.JSONEq(t, tt.want.message, w.Body.String())
+			}
+			assert.NotEmpty(t, res.Body)
+			defer res.Body.Close()
+		})
+	}
+}
+
+func TestCreateURLHandler(t *testing.T) {
+	tempDir := t.TempDir()
+	testFile := filepath.Join(tempDir, "data.json")
+	testLogger := zap.NewNop()
+
+	cfg := config.Config{
+		ServerAddress:   "localhost:8080",
+		ResponseURL:     "http://localhost:8080",
+		FileStoragePath: testFile,
+	}
+	urlRepo, err := repository.NewURLRepository(&cfg, testLogger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	urlService := service.NewURLService(urlRepo, &cfg)
+	h := NewURLHandler(&cfg, urlService, testLogger)
 
 	type want struct {
 		status      int
@@ -86,13 +184,22 @@ func TestCreateURLHandler(t *testing.T) {
 }
 
 func TestGetURLHandler(t *testing.T) {
+	tempDir := t.TempDir()
+	testFile := filepath.Join(tempDir, "data.json")
+	testLogger := zap.NewNop()
+
 	cfg := config.Config{
-		ServerAddress: "localhost:8080",
-		ResponseURL:   "http://localhost:8080",
+		ServerAddress:   "localhost:8080",
+		ResponseURL:     "http://localhost:8080",
+		FileStoragePath: testFile,
 	}
-	urlRepo := repository.NewURLRepository()
-	urlService := service.NewURLService(urlRepo)
-	h := NewURLHandler(&cfg, urlService)
+
+	urlRepo, err := repository.NewURLRepository(&cfg, testLogger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	urlService := service.NewURLService(urlRepo, &cfg)
+	h := NewURLHandler(&cfg, urlService, testLogger)
 	type request struct {
 		method string
 		url    string
@@ -205,7 +312,7 @@ func TestGenerateShortURL(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			res, err := utility.GenerateID(tt.idLength)
+			res, err := utility.GenerateShortURL(tt.idLength)
 			if err != nil {
 				t.Errorf("%s", err)
 			}

@@ -6,21 +6,36 @@ import (
 
 	"github.com/artni96/url-shortener/internal/config"
 	"github.com/artni96/url-shortener/internal/handler/urls"
+	"github.com/artni96/url-shortener/internal/logger"
 	"github.com/artni96/url-shortener/internal/repository"
 	"github.com/artni96/url-shortener/internal/service"
+	"go.uber.org/zap"
 )
 
 func main() {
-
 	cfg, err := config.ParseFlags()
-	urlRepository := repository.NewURLRepository()
-	urlService := service.NewURLService(urlRepository)
-	urlHandler := urls.URLRouter(cfg, urlService)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(err.Error())
 	}
-	err = http.ListenAndServe(cfg.ServerAddress, urlHandler)
+	if err = run(cfg); err != nil {
+		log.Fatal(err.Error())
+	}
+}
+
+func run(cfg *config.Config) error {
+	appLogger, err := logger.InitLogger(cfg.DebugLevel)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
+	urlRepository, err := repository.NewURLRepository(cfg, appLogger)
+	if err != nil {
+		return err
+	}
+	urlService := service.NewURLService(urlRepository, cfg)
+	urlHandler := urls.URLRouter(cfg, urlService, appLogger)
+
+	appLogger.Info("Starting server",
+		zap.String("server address", cfg.ServerAddress),
+	)
+	return http.ListenAndServe(cfg.ServerAddress, urlHandler)
 }

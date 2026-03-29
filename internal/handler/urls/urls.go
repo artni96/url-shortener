@@ -1,6 +1,8 @@
 package urls
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -9,9 +11,12 @@ import (
 	"strings"
 
 	"github.com/artni96/url-shortener/internal/config"
+	"github.com/artni96/url-shortener/internal/logger"
+	"github.com/artni96/url-shortener/internal/model"
 	"github.com/artni96/url-shortener/internal/service"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"go.uber.org/zap"
 )
 
 const urlPattern = `^https?:\/\/`
@@ -19,13 +24,67 @@ const urlPattern = `^https?:\/\/`
 type URLHandler struct {
 	responseURL string
 	urlService  service.URLServiceInterface
+	appLogger   *zap.Logger
 }
 
-func NewURLHandler(cfg *config.Config, urlService service.URLServiceInterface) *URLHandler {
+func NewURLHandler(cfg *config.Config, urlService service.URLServiceInterface, appLogger *zap.Logger) *URLHandler {
 	return &URLHandler{
 		responseURL: cfg.ResponseURL,
 		urlService:  urlService,
+		appLogger:   appLogger,
 	}
+}
+
+func (h *URLHandler) ShortenURLHandler(w http.ResponseWriter, r *http.Request) {
+	var responseData model.URLCreateResponse
+
+	var body model.URLCreateRequest
+	var buf bytes.Buffer
+
+	_, err := buf.ReadFrom(r.Body)
+	defer r.Body.Close()
+
+	if err != nil {
+		errMessage := "invalid request - empty body"
+		ErrorResponse(w, errMessage, http.StatusBadRequest, h.appLogger)
+		return
+	}
+
+	if err = json.Unmarshal(buf.Bytes(), &body); err != nil {
+		errMessage := "could not unmarshal request body"
+		ErrorResponse(w, errMessage, http.StatusBadRequest, h.appLogger)
+		return
+	}
+
+	if !isURLCorrect(body.URL) {
+		errMessage := fmt.Sprintf("url '%s' is invalid", body.URL)
+		ErrorResponse(w, errMessage, http.StatusBadRequest, h.appLogger)
+		return
+	}
+
+	urlID, err := h.urlService.Create(body.URL)
+	if err != nil {
+		if errors.Is(err, service.ErrFailedToCreated) {
+			errMessage := err.Error()
+			ErrorResponse(w, errMessage, http.StatusInternalServerError, h.appLogger)
+			return
+		} else {
+			errMessage := fmt.Sprintf("Could not create short URL for %s", body.URL)
+			ErrorResponse(w, errMessage, http.StatusInternalServerError, h.appLogger)
+			return
+		}
+	}
+
+	responseData.Result = fmt.Sprintf("%s/%s", h.responseURL, urlID)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	resp, err := json.Marshal(responseData)
+	if err != nil {
+		errMessage := fmt.Sprintf("Could not create short URL for %s", body.URL)
+		ErrorResponse(w, errMessage, http.StatusInternalServerError, h.appLogger)
+		return
+	}
+	w.Write(resp)
 }
 
 func (h *URLHandler) CreateURLHandler(w http.ResponseWriter, r *http.Request) {
@@ -34,7 +93,7 @@ func (h *URLHandler) CreateURLHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil && err.Error() != "EOF" {
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Не получается получить тело запроса"))
+		w.Write([]byte("Could not read request body"))
 		return
 	}
 
@@ -42,14 +101,14 @@ func (h *URLHandler) CreateURLHandler(w http.ResponseWriter, r *http.Request) {
 	if urlStr == "" {
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Пустое тело запроса"))
+		w.Write([]byte("Empty request body"))
 		return
 	}
 
 	if !isURLCorrect(urlStr) {
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("В тело запроса передан некорректный url"))
+		w.Write([]byte("Incorrect request body"))
 		return
 	}
 
@@ -62,7 +121,7 @@ func (h *URLHandler) CreateURLHandler(w http.ResponseWriter, r *http.Request) {
 		} else {
 			w.Header().Set("Content-Type", "text/plain")
 			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte("Не удалось обработать запрос"))
+			w.Write([]byte("Could not handle the request"))
 		}
 	}
 	w.Header().Set("Content-Type", "text/plain")
@@ -73,10 +132,10 @@ func (h *URLHandler) CreateURLHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *URLHandler) GetURLHandler(w http.ResponseWriter, r *http.Request) {
-	redirectTo, err := h.urlService.Get(strings.TrimPrefix(r.URL.Path, "/"))
+	redirectTo, err := h.urlService.GetByShortURL(strings.TrimPrefix(r.URL.Path, "/"))
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Ссылка не найдена"))
+		w.Write([]byte("URL not found"))
 		return
 	}
 	w.Header().Set("Content-Type", "text/plain")
@@ -84,20 +143,23 @@ func (h *URLHandler) GetURLHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusTemporaryRedirect)
 }
 
-func URLRouter(cfg *config.Config, urlService service.URLServiceInterface) chi.Router {
+func URLRouter(cfg *config.Config, urlService service.URLServiceInterface, appLogger *zap.Logger) chi.Router {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RealIP)
-	r.Use(middleware.Logger)
+	r.Use(logger.RequestLoggerMiddleware(appLogger))
 	r.Use(middleware.Recoverer)
-	urlHandler := NewURLHandler(cfg, urlService)
+	r.Use(config.GzipMiddleware)
+
+	urlHandler := NewURLHandler(cfg, urlService, appLogger)
 
 	r.Route("/", func(r chi.Router) {
 		r.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte(fmt.Sprintf("Метод %s запрещен", r.Method)))
+			w.Write([]byte(fmt.Sprintf("Method %s is forbidden", r.Method)))
 		})
 		r.Post("/", urlHandler.CreateURLHandler)
+		r.Post("/api/shorten", urlHandler.ShortenURLHandler)
 
 		r.Get("/{id}", urlHandler.GetURLHandler)
 	})
