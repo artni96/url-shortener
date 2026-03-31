@@ -22,8 +22,7 @@ type URLRepositoryInterface interface {
 	SaveURL(url model.URLEntity) error
 }
 type LocalURLRepository struct {
-	mu sync.RWMutex
-	//urls []model.URLEntity
+	mu   sync.RWMutex
 	urls map[string]string
 	cfg  *config.Config
 }
@@ -53,29 +52,6 @@ func (repo *LocalURLRepository) GetByShortURL(shortURL string) (string, error) {
 	}
 	return entity, nil
 }
-
-//func (repo *LocalURLRepository) getByIDUnlocked(urlID string) (model.URLEntity, error) {
-//	if len(repo.urls) == 0 {
-//		return model.URLEntity{}, ErrURLNotFound
-//	}
-//
-//	for _, entity := range repo.urls {
-//		if entity.ShortURL == urlID {
-//			return entity, nil
-//		}
-//	}
-//	return model.URLEntity{}, fmt.Errorf("%w: %s", ErrURLNotFound, urlID)
-//}
-
-//func getLastID(storage []model.URLEntity) int {
-//	lastID := -1
-//	for _, lineVal := range storage {
-//		if lineVal.ID > lastID {
-//			lastID = lineVal.ID
-//		}
-//	}
-//	return lastID + 1
-//}
 
 func (repo *LocalURLRepository) SaveURL(urlEntity model.URLEntity) error {
 	repo.mu.Lock()
