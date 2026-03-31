@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"net/http"
 	"os/exec"
@@ -16,7 +17,7 @@ import (
 )
 
 func run(cfg *config.Config) error {
-
+	ctx := context.Background()
 	appLogger, err := logger.InitLogger(cfg.DebugLevel)
 
 	db, err := sql.Open("pgx", cfg.DatabaseDsn)
@@ -29,7 +30,7 @@ func run(cfg *config.Config) error {
 		return err
 	}
 
-	if err := runMigrations(); err != nil && cfg.DatabaseDsn != "" {
+	if err := runMigrations(db, ctx); err != nil && cfg.DatabaseDsn != "" {
 		appLogger.Error("failed to run migrations",
 			zap.String("error message", err.Error()),
 		)
@@ -56,13 +57,17 @@ func run(cfg *config.Config) error {
 	return http.ListenAndServe(cfg.ServerAddress, mainRouter)
 }
 
-func runMigrations() error {
+func runMigrations(db *sql.DB, ctx context.Context) error {
+	err := db.PingContext(ctx)
+	if err != nil {
+		return err
+	}
 	cmd := exec.Command(
 		"migrate",
 		"-database", "postgres://postgres:postgres@localhost:5432/url_shortener?sslmode=disable",
 		"-path", "./migrations", "up",
 	)
-	_, err := cmd.CombinedOutput()
+	_, err = cmd.CombinedOutput()
 	if err != nil {
 		return err
 	}
