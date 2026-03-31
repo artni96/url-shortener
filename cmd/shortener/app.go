@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"net/http"
+	"os/exec"
 
 	"github.com/artni96/url-shortener/internal/config"
 	"github.com/artni96/url-shortener/internal/handler/healthcheck"
@@ -25,10 +26,18 @@ func run(cfg *config.Config) error {
 			zap.String("database destination", cfg.DatabaseDsn),
 			zap.String("error message", err.Error()),
 		)
-	}
-	if err != nil {
 		return err
 	}
+
+	if err := runMigrations(); err != nil {
+		appLogger.Error("failed to run migrations",
+			zap.String("error message", err.Error()),
+		)
+		return err
+	} else {
+		appLogger.Info("Migrations completed successfully")
+	}
+
 	urlRepository, err := repository.NewURLRepository(cfg, appLogger)
 	if err != nil {
 		return err
@@ -45,4 +54,17 @@ func run(cfg *config.Config) error {
 		zap.String("server address", cfg.ServerAddress),
 	)
 	return http.ListenAndServe(cfg.ServerAddress, mainRouter)
+}
+
+func runMigrations() error {
+	cmd := exec.Command(
+		"migrate",
+		"-database", "postgres://postgres:postgres@localhost:5432/url_shortener?sslmode=disable",
+		"-path", "./migrations", "up",
+	)
+	_, err := cmd.CombinedOutput()
+	if err != nil {
+		return err
+	}
+	return nil
 }

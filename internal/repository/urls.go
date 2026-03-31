@@ -167,13 +167,14 @@ func (repo *LocalURLRepository) uploadLocalStorage(filepath string, log *zap.Log
 
 func NewURLRepository(cfg *config.Config, log *zap.Logger) (*LocalURLRepository, error) {
 	repo := LocalURLRepository{urls: make(map[string]string)}
-	err := repo.uploadLocalStorage(cfg.FileStoragePath, log)
-	if err != nil {
-		log.Error("could not upload data from the file",
-			zap.String("filepath", cfg.FileStoragePath),
-			zap.String("error", err.Error()))
-		return nil, err
+	if cfg.DatabaseDsn == "" {
+		err := repo.uploadLocalStorage(cfg.FileStoragePath, log)
+		if err != nil {
+			log.Error("could not upload data from the file",
+				zap.String("filepath", cfg.FileStoragePath),
+				zap.String("error", err.Error()))
+			return nil, err
+		}
 	}
-
 	return &repo, nil
 }

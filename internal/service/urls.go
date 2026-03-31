@@ -57,7 +57,7 @@ func (s *URLService) Create(originalURL string) (string, error) {
 				return "", err
 			}
 		}
-
+		
 		if s.cfg.FileStoragePath != "" {
 			fileWriter, err := repository.NewWriter(s.cfg.FileStoragePath)
 			if err != nil {
