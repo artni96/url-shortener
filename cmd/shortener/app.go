@@ -29,7 +29,7 @@ func run(cfg *config.Config) error {
 		return err
 	}
 
-	if err := runMigrations(); err != nil {
+	if err := runMigrations(); err != nil && cfg.DatabaseDsn != "" {
 		appLogger.Error("failed to run migrations",
 			zap.String("error message", err.Error()),
 		)
