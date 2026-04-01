@@ -55,10 +55,10 @@ func InitDBConnection(ctx context.Context, cfg *config.Config, log *zap.Logger) 
 		log.Info("failed to run migrations",
 			zap.String("error message", err.Error()),
 		)
-		return nil, err
+	} else {
+		log.Info("Migrations completed successfully")
 	}
 
-	log.Info("Migrations completed successfully")
 	return db, nil
 }
 
