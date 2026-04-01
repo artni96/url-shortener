@@ -4,12 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
-	"os/exec"
-	"strings"
 	"time"
 
 	"github.com/artni96/url-shortener/internal/config"
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"go.uber.org/zap"
 )
 
@@ -51,7 +51,7 @@ func InitDBConnection(ctx context.Context, cfg *config.Config, log *zap.Logger) 
 		return nil, err
 	}
 
-	if err := runMigrations(cfg); err != nil {
+	if err := runMigrations(db); err != nil {
 		log.Info("failed to run migrations",
 			zap.String("error message", err.Error()),
 		)
@@ -62,35 +62,24 @@ func InitDBConnection(ctx context.Context, cfg *config.Config, log *zap.Logger) 
 	return db, nil
 }
 
-func runMigrations(cfg *config.Config) error {
-	dbAddress, err := dbAddressToRunMigrations(cfg)
+func runMigrations(db *sql.DB) error {
+	driver, err := postgres.WithInstance(db, &postgres.Config{})
 	if err != nil {
 		return err
 	}
-	fmt.Println("db address:", dbAddress)
-	cmd := exec.Command(
-		"migrate",
-		"-database", dbAddress,
-		"-path", "./migrations", "up",
+
+	migrator, err := migrate.NewWithDatabaseInstance(
+		"file://migrations",
+		"postgres",
+		driver,
 	)
-	_, err = cmd.CombinedOutput()
 	if err != nil {
 		return err
 	}
-	return nil
-}
 
-func dbAddressToRunMigrations(cfg *config.Config) (string, error) {
-	dbConnParams := make(map[string]string)
-	dbConnParams["port"] = "5432"
-	splitDatabaseDsn := strings.Split(cfg.DatabaseDsn, " ")
-	for _, s := range splitDatabaseDsn {
-		if s != "" {
-			splitObj := strings.Split(s, "=")
-			dbConnParams[splitObj[0]] = splitObj[1]
-		}
+	if err := migrator.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+		return err
 	}
 
-	result := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s", dbConnParams["user"], dbConnParams["password"], dbConnParams["host"], dbConnParams["port"], dbConnParams["dbname"], dbConnParams["sslmode"])
-	return result, nil
+	return nil
 }
