@@ -31,12 +31,12 @@ func NewHealthCheckHandler(ctx *context.Context, db *sql.DB, log *zap.Logger) *H
 func (h *Handler) Ping(w http.ResponseWriter, r *http.Request) {
 
 	if h.db == nil {
-		h.log.Error("unable to ping database", zap.Error(errors.New("unable to ping database")))
+		h.log.Info("unable to ping database", zap.Error(errors.New("unable to ping database")))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	if err := h.db.PingContext(*h.ctx); err != nil {
-		h.log.Error("unable to ping database", zap.Error(err))
+		h.log.Info("unable to ping database", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}

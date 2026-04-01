@@ -167,19 +167,20 @@ func (s *FileScanner) CollectData() ([]model.URLEntity, error) {
 
 func (repo *LocalURLRepository) uploadLocalStorage(ctx context.Context, filepath string, log *zap.Logger) error {
 	fileReader, err := NewFileScanner(filepath)
+	if fileReader == nil {
+		return nil
+	}
 	defer func(fileReader *FileScanner) {
 		err := fileReader.Close()
 		if err != nil {
-			log.Error("could not close file reader",
-				zap.String("error", err.Error()),
-			)
+			log.Info("could not close file reader", zap.String("filepath", filepath))
 		}
 	}(fileReader)
 
 	if err != nil {
-		log.Error("could not initialize NewFileScanner",
+		log.Info("could not initialize NewFileScanner",
 			zap.String("error", err.Error()))
-		return err
+		return nil
 	}
 	result, err := fileReader.CollectData()
 	if err != nil {
@@ -205,11 +206,14 @@ func NewURLRepository(ctx *context.Context, app *config.App, log *zap.Logger) (*
 	if app.DB == nil && app.Cfg.DatabaseDsn != "" {
 		err := repo.uploadLocalStorage(*ctx, app.Cfg.FileStoragePath, log)
 		if err != nil {
-			log.Error("could not upload data from the file",
+			log.Info("could not upload data from the file",
 				zap.String("filepath", app.Cfg.FileStoragePath),
 				zap.String("error", err.Error()))
 			return nil, err
 		}
+		log.Info("filepath for file storage is not set, keep working with in memory storage")
+		return &repo, nil
 	}
+	log.Info("successfully uploaded data from the file")
 	return &repo, nil
 }
