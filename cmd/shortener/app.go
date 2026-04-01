@@ -39,7 +39,7 @@ func run(cfg *config.Config) error {
 
 	mainRouter := chi.NewRouter()
 	urlRouter := urls.URLRouter(&ctx, NewApp.Cfg, urlService, appLogger)
-	healthRouter := healthcheck.HealthCheckRouter(DBCon, appLogger)
+	healthRouter := healthcheck.HealthCheckRouter(&ctx, DBCon, appLogger)
 	mainRouter.Mount("/", urlRouter)
 	mainRouter.Mount("/ping", healthRouter)
 

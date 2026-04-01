@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
-	"time"
 
 	"github.com/artni96/url-shortener/internal/config"
 	"github.com/artni96/url-shortener/internal/logger"
@@ -18,25 +17,25 @@ import (
 type Handler struct {
 	db  *sql.DB
 	log *zap.Logger
+	ctx *context.Context
 }
 
-func NewHealthCheckHandler(db *sql.DB, log *zap.Logger) *Handler {
+func NewHealthCheckHandler(ctx *context.Context, db *sql.DB, log *zap.Logger) *Handler {
 	return &Handler{
 		db:  db,
 		log: log,
+		ctx: ctx,
 	}
 }
 
 func (h *Handler) Ping(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	defer cancel()
 
 	if h.db == nil {
 		h.log.Error("unable to ping database", zap.Error(errors.New("unable to ping database")))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	if err := h.db.PingContext(ctx); err != nil {
+	if err := h.db.PingContext(*h.ctx); err != nil {
 		h.log.Error("unable to ping database", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -47,7 +46,7 @@ func (h *Handler) Ping(w http.ResponseWriter, r *http.Request) {
 	return
 }
 
-func HealthCheckRouter(db *sql.DB, log *zap.Logger) http.Handler {
+func HealthCheckRouter(ctx *context.Context, db *sql.DB, log *zap.Logger) http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RealIP)
@@ -55,7 +54,7 @@ func HealthCheckRouter(db *sql.DB, log *zap.Logger) http.Handler {
 	r.Use(middleware.Recoverer)
 	r.Use(config.GzipMiddleware)
 
-	handler := NewHealthCheckHandler(db, log)
+	handler := NewHealthCheckHandler(ctx, db, log)
 	r.Get("/", handler.Ping)
 	return r
 }
