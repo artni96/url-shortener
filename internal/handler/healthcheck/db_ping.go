@@ -3,6 +3,7 @@ package healthcheck
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"net/http"
 	"time"
 
@@ -30,8 +31,14 @@ func (h *Handler) Ping(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 
+	if h.db == nil {
+		h.log.Error("unable to ping database", zap.Error(errors.New("unable to ping database")))
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 	if err := h.db.PingContext(ctx); err != nil {
 		h.log.Error("unable to ping database", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 

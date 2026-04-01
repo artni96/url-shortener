@@ -1,6 +1,7 @@
 package urls
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/artni96/url-shortener/internal/config"
+	"github.com/artni96/url-shortener/internal/config/db"
 	"github.com/artni96/url-shortener/internal/repository"
 	"github.com/artni96/url-shortener/internal/service"
 	"github.com/artni96/url-shortener/internal/utility"
@@ -21,18 +23,30 @@ func TestShortenURL(t *testing.T) {
 	testFile := filepath.Join(tempDir, "data.json")
 	testLogger := zap.NewNop()
 
+	ctx := context.Background()
+
 	cfg := config.Config{
 		ServerAddress:   "localhost:8080",
 		ResponseURL:     "http://localhost:8080",
 		FileStoragePath: testFile,
 	}
 
-	urlRepo, err := repository.NewURLRepository(&cfg, testLogger)
+	testDB, err := db.InitDBConnection(ctx, &cfg, testLogger)
+	if err != nil {
+		testDB = nil
+	}
+
+	app := config.App{
+		DB:  testDB,
+		Cfg: &cfg,
+	}
+
+	urlRepo, err := repository.NewURLRepository(&ctx, &app, testLogger)
 	if err != nil {
 		t.Fatal(err)
 	}
-	urlService := service.NewURLService(urlRepo, &cfg)
-	h := NewURLHandler(&cfg, urlService, testLogger)
+	urlService := service.NewURLService(urlRepo, &app)
+	h := NewURLHandler(&ctx, &cfg, urlService, testLogger)
 
 	type want struct {
 		contentType string
@@ -109,17 +123,30 @@ func TestCreateURLHandler(t *testing.T) {
 	testFile := filepath.Join(tempDir, "data.json")
 	testLogger := zap.NewNop()
 
+	ctx := context.Background()
+
 	cfg := config.Config{
 		ServerAddress:   "localhost:8080",
 		ResponseURL:     "http://localhost:8080",
 		FileStoragePath: testFile,
 	}
-	urlRepo, err := repository.NewURLRepository(&cfg, testLogger)
+
+	testDB, err := db.InitDBConnection(ctx, &cfg, testLogger)
+	if err != nil {
+		testDB = nil
+	}
+
+	app := config.App{
+		DB:  testDB,
+		Cfg: &cfg,
+	}
+
+	urlRepo, err := repository.NewURLRepository(&ctx, &app, testLogger)
 	if err != nil {
 		t.Fatal(err)
 	}
-	urlService := service.NewURLService(urlRepo, &cfg)
-	h := NewURLHandler(&cfg, urlService, testLogger)
+	urlService := service.NewURLService(urlRepo, &app)
+	h := NewURLHandler(&ctx, &cfg, urlService, testLogger)
 
 	type want struct {
 		status      int
@@ -187,6 +214,7 @@ func TestGetURLHandler(t *testing.T) {
 	tempDir := t.TempDir()
 	testFile := filepath.Join(tempDir, "data.json")
 	testLogger := zap.NewNop()
+	ctx := context.Background()
 
 	cfg := config.Config{
 		ServerAddress:   "localhost:8080",
@@ -194,12 +222,22 @@ func TestGetURLHandler(t *testing.T) {
 		FileStoragePath: testFile,
 	}
 
-	urlRepo, err := repository.NewURLRepository(&cfg, testLogger)
+	testDB, err := db.InitDBConnection(ctx, &cfg, testLogger)
+	if err != nil {
+		testDB = nil
+	}
+
+	app := config.App{
+		DB:  testDB,
+		Cfg: &cfg,
+	}
+
+	urlRepo, err := repository.NewURLRepository(&ctx, &app, testLogger)
 	if err != nil {
 		t.Fatal(err)
 	}
-	urlService := service.NewURLService(urlRepo, &cfg)
-	h := NewURLHandler(&cfg, urlService, testLogger)
+	urlService := service.NewURLService(urlRepo, &app)
+	h := NewURLHandler(&ctx, &cfg, urlService, testLogger)
 	type request struct {
 		method string
 		url    string

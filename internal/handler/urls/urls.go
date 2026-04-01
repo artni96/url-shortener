@@ -2,6 +2,7 @@ package urls
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,13 +26,15 @@ type URLHandler struct {
 	responseURL string
 	urlService  service.URLServiceInterface
 	appLogger   *zap.Logger
+	ctx         *context.Context
 }
 
-func NewURLHandler(cfg *config.Config, urlService service.URLServiceInterface, appLogger *zap.Logger) *URLHandler {
+func NewURLHandler(ctx *context.Context, cfg *config.Config, urlService service.URLServiceInterface, appLogger *zap.Logger) *URLHandler {
 	return &URLHandler{
 		responseURL: cfg.ResponseURL,
 		urlService:  urlService,
 		appLogger:   appLogger,
+		ctx:         ctx,
 	}
 }
 
@@ -62,7 +65,7 @@ func (h *URLHandler) ShortenURLHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	urlID, err := h.urlService.Create(body.URL)
+	urlID, err := h.urlService.Create(*h.ctx, body.URL)
 	if err != nil {
 		if errors.Is(err, service.ErrFailedToCreated) {
 			errMessage := err.Error()
@@ -112,7 +115,7 @@ func (h *URLHandler) CreateURLHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	urlID, err := h.urlService.Create(urlStr)
+	urlID, err := h.urlService.Create(*h.ctx, urlStr)
 	if err != nil {
 		if errors.Is(err, service.ErrFailedToCreated) {
 			w.Header().Set("Content-Type", "text/plain")
@@ -132,7 +135,7 @@ func (h *URLHandler) CreateURLHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *URLHandler) GetURLHandler(w http.ResponseWriter, r *http.Request) {
-	redirectTo, err := h.urlService.GetByShortURL(strings.TrimPrefix(r.URL.Path, "/"))
+	redirectTo, err := h.urlService.GetByShortURL(*h.ctx, strings.TrimPrefix(r.URL.Path, "/"))
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("URL not found"))
@@ -143,7 +146,7 @@ func (h *URLHandler) GetURLHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusTemporaryRedirect)
 }
 
-func URLRouter(cfg *config.Config, urlService service.URLServiceInterface, appLogger *zap.Logger) chi.Router {
+func URLRouter(ctx *context.Context, cfg *config.Config, urlService service.URLServiceInterface, appLogger *zap.Logger) chi.Router {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RealIP)
@@ -151,7 +154,7 @@ func URLRouter(cfg *config.Config, urlService service.URLServiceInterface, appLo
 	r.Use(middleware.Recoverer)
 	r.Use(config.GzipMiddleware)
 
-	urlHandler := NewURLHandler(cfg, urlService, appLogger)
+	urlHandler := NewURLHandler(ctx, cfg, urlService, appLogger)
 
 	r.Route("/", func(r chi.Router) {
 		r.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {

@@ -1,11 +1,9 @@
 package config
 
 import (
+	"database/sql"
 	"flag"
-	"fmt"
 	"os"
-
-	"github.com/joho/godotenv"
 )
 
 type Config struct {
@@ -20,19 +18,13 @@ func ParseFlags() (*Config, error) {
 	fs := flag.NewFlagSet("fs", flag.ExitOnError)
 	conf := Config{}
 
-	err := godotenv.Load()
-	if err != nil {
-		return nil, err
-	}
-	defaultDBDsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", os.Getenv("DB_HOST"), os.Getenv("DB_PORT"), os.Getenv("DB_USER"), os.Getenv("DB_USER_PASSWORD"), os.Getenv("DB_NAME"))
-
 	fs.StringVar(&conf.ServerAddress, "a", "localhost:8080", "server address")
 	fs.StringVar(&conf.ResponseURL, "b", "http://localhost:8080", "response URL")
-	fs.StringVar(&conf.FileStoragePath, "f", "./data/local_storage.json", "file storage path")
+	fs.StringVar(&conf.FileStoragePath, "f", "", "file storage path")
 	fs.StringVar(&conf.DebugLevel, "debug", "Info", "debug level")
-	fs.StringVar(&conf.DatabaseDsn, "d", defaultDBDsn, "database dsn")
+	fs.StringVar(&conf.DatabaseDsn, "d", "", "database dsn")
 
-	err = fs.Parse(os.Args[1:])
+	err := fs.Parse(os.Args[1:])
 	if err != nil {
 		return nil, err
 	}
@@ -62,4 +54,9 @@ func ParseFlags() (*Config, error) {
 	}
 
 	return &conf, nil
+}
+
+type App struct {
+	DB  *sql.DB
+	Cfg *Config
 }

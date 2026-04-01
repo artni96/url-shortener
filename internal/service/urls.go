@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -13,24 +14,24 @@ import (
 var ErrFailedToCreated = errors.New("could not create ShortURL")
 
 type URLServiceInterface interface {
-	GetByShortURL(urlID string) (string, error)
-	Create(urlStr string) (string, error)
+	GetByShortURL(ctx context.Context, urlID string) (string, error)
+	Create(ctx context.Context, urlStr string) (string, error)
 }
 type URLService struct {
 	repo repository.URLRepositoryInterface
-	cfg  *config.Config
 	log  *zap.Logger
+	app  *config.App
 }
 
-func (s *URLService) GetByShortURL(shortURL string) (string, error) {
-	originalURL, err := s.repo.GetByShortURL(shortURL)
+func (s *URLService) GetByShortURL(ctx context.Context, shortURL string) (string, error) {
+	originalURL, err := s.repo.GetByShortURL(ctx, shortURL)
 	if err != nil {
 		return "", err
 	}
 	return originalURL, nil
 }
 
-func (s *URLService) Create(originalURL string) (string, error) {
+func (s *URLService) Create(ctx context.Context, originalURL string) (string, error) {
 
 	for i := range 5 {
 		urlID, err := utility.GenerateShortURL(10)
@@ -41,7 +42,7 @@ func (s *URLService) Create(originalURL string) (string, error) {
 			)
 			continue
 		}
-		entity, err := s.repo.Create(originalURL, urlID)
+		entity, err := s.repo.Create(ctx, originalURL, urlID)
 		if err != nil {
 			if errors.Is(err, repository.ErrURLAlreadyExists) {
 				s.log.Info(
@@ -57,12 +58,12 @@ func (s *URLService) Create(originalURL string) (string, error) {
 				return "", err
 			}
 		}
-		
-		if s.cfg.FileStoragePath != "" {
-			fileWriter, err := repository.NewWriter(s.cfg.FileStoragePath)
+
+		if s.app.Cfg.FileStoragePath != "" {
+			fileWriter, err := repository.NewWriter(s.app.Cfg.FileStoragePath)
 			if err != nil {
 				s.log.Error("could not create file writer",
-					zap.String("path", s.cfg.FileStoragePath),
+					zap.String("path", s.app.Cfg.FileStoragePath),
 					zap.String("error message", err.Error()),
 				)
 				return "", err
@@ -80,8 +81,8 @@ func (s *URLService) Create(originalURL string) (string, error) {
 	return "", fmt.Errorf("%w %s", ErrFailedToCreated, originalURL)
 }
 
-func NewURLService(repo repository.URLRepositoryInterface, cfg *config.Config) *URLService {
+func NewURLService(repo repository.URLRepositoryInterface, app *config.App) *URLService {
 	return &URLService{
-		repo: repo, cfg: cfg,
+		repo: repo, app: app,
 	}
 }
