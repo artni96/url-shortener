@@ -82,6 +82,7 @@ func runMigrations(cfg *config.Config) error {
 
 func dbAddressToRunMigrations(cfg *config.Config) (string, error) {
 	dbConnParams := make(map[string]string)
+	dbConnParams["port"] = "5432"
 	splitDatabaseDsn := strings.Split(cfg.DatabaseDsn, " ")
 	for _, s := range splitDatabaseDsn {
 		if s != "" {
@@ -89,9 +90,7 @@ func dbAddressToRunMigrations(cfg *config.Config) (string, error) {
 			dbConnParams[splitObj[0]] = splitObj[1]
 		}
 	}
-	if len(dbConnParams) != 6 {
-		return "", fmt.Errorf("database dsn is not valid")
-	}
+
 	result := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s", dbConnParams["user"], dbConnParams["password"], dbConnParams["host"], dbConnParams["port"], dbConnParams["dbname"], dbConnParams["sslmode"])
 	return result, nil
 }
