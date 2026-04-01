@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"os/exec"
 
 	"github.com/artni96/url-shortener/internal/config"
@@ -18,20 +19,26 @@ func InitDBConnection(ctx context.Context, cfg *config.Config, log *zap.Logger) 
 		)
 		return nil, err
 	}
+	if db == nil {
+		log.Info("failed to connect to database")
+		return nil, errors.New("failed to connect to database")
+	}
+
 	err = db.PingContext(ctx)
-	//if err != nil {
-	//	log.Info("failed to ping database, keep working with local storage",
-	//		zap.String("database destination", cfg.DatabaseDsn),
-	//		zap.String("error message", err.Error()),
-	//	)
-	//}
-	//
-	//if err := runMigrations(); err != nil {
-	//	log.Info("failed to run migrations",
-	//		zap.String("error message", err.Error()),
-	//	)
-	//	return nil, err
-	//}
+	if err != nil {
+		log.Info("failed to ping database, keep working with local storage",
+			zap.String("database destination", cfg.DatabaseDsn),
+			zap.String("error message", err.Error()),
+		)
+		return nil, err
+	}
+
+	if err := runMigrations(); err != nil {
+		log.Info("failed to run migrations",
+			zap.String("error message", err.Error()),
+		)
+		return nil, err
+	}
 
 	log.Info("Migrations completed successfully")
 	return db, nil
