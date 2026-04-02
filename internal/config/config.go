@@ -1,10 +1,10 @@
 package config
 
 import (
-	"database/sql"
 	"flag"
 	"os"
 
+	"github.com/jmoiron/sqlx"
 	"go.uber.org/zap"
 )
 
@@ -59,7 +59,7 @@ func ParseFlags() (*Config, error) {
 }
 
 type App struct {
-	DB     *sql.DB
+	DB     *sqlx.DB
 	Cfg    *Config
 	Logger *zap.Logger
 }

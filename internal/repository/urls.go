@@ -3,7 +3,6 @@ package repository
 import (
 	"bufio"
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,11 +11,13 @@ import (
 
 	"github.com/artni96/url-shortener/internal/config"
 	"github.com/artni96/url-shortener/internal/model"
+	"github.com/jmoiron/sqlx"
 	"go.uber.org/zap"
 )
 
 var ErrURLAlreadyExists = errors.New("url already exists")
 var ErrURLNotFound = errors.New("url not found")
+var ErrURLNotCreated = errors.New("could not create url")
 
 type URLRepositoryInterface interface {
 	GetByShortURL(ctx context.Context, shortURL string) (string, error)
@@ -26,7 +27,7 @@ type URLRepositoryInterface interface {
 type LocalURLRepository struct {
 	mu     sync.RWMutex
 	urls   map[string]string
-	db     *sql.DB
+	db     *sqlx.DB
 	logger *zap.Logger
 }
 
@@ -35,22 +36,25 @@ func (repo *LocalURLRepository) Create(ctx context.Context, originalURL, shortUR
 	defer repo.mu.Unlock()
 
 	if repo.db != nil {
-		query := "SELECT * FROM urls WHERE short_url = $1"
-		row := repo.db.QueryRowContext(ctx, query, shortURL)
-
 		entity := model.URLEntity{}
-		err := row.Scan(&entity.OriginalURL, &entity.ShortURL)
+		selectQuery := "SELECT original_url, short_url FROM urls WHERE short_url = $1"
+		err := repo.db.GetContext(ctx, &entity, selectQuery, shortURL)
 
-		if err == nil {
+		if err.Error() != "sql: no rows in result set" {
 			return model.URLEntity{}, err
 		}
 
-		query = "INSERT INTO urls (short_url, original_url) VALUES ($1, $2)"
-
-		_, err = repo.db.ExecContext(ctx, query, shortURL, originalURL)
-		if err != nil {
-			return model.URLEntity{}, err
+		if entity.ShortURL != "" && entity.ShortURL != shortURL {
+			return model.URLEntity{}, fmt.Errorf("%w: short url already exists", ErrURLAlreadyExists)
 		}
+
+		insertQuery := "INSERT INTO urls (short_url, original_url) VALUES ($1, $2)"
+
+		result := repo.db.MustExecContext(ctx, insertQuery, shortURL, originalURL)
+		if result == nil {
+			return model.URLEntity{}, ErrURLNotCreated
+		}
+		
 		entity.OriginalURL = originalURL
 		entity.ShortURL = shortURL
 		return entity, nil
@@ -74,10 +78,9 @@ func (repo *LocalURLRepository) GetByShortURL(ctx context.Context, shortURL stri
 	var entity string
 
 	if repo.db != nil {
-		query := "SELECT original_url FROM urls where short_url = $1"
-		row := repo.db.QueryRowContext(ctx, query, shortURL)
+		selectQuery := "SELECT original_url FROM urls where short_url = $1"
+		err := repo.db.GetContext(ctx, &entity, selectQuery, shortURL)
 
-		err := row.Scan(&entity)
 		if err != nil {
 			return "", err
 		}

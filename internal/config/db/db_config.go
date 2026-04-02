@@ -2,7 +2,6 @@ package db
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"time"
 
@@ -10,30 +9,31 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/jmoiron/sqlx"
 	"go.uber.org/zap"
 )
 
-func InitDBConnection(ctx context.Context, app *config.App) (*sql.DB, error) {
+func InitDBConnection(ctx context.Context, app *config.App) (*sqlx.DB, error) {
 	localCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 	if app.Cfg.DatabaseDsn == "" {
 		app.Logger.Info("database dsn is empty, cannot connect to database")
 		return nil, errors.New("database dsn is required")
 	}
-	db, err := sql.Open("pgx", app.Cfg.DatabaseDsn)
-	if err != nil {
-		app.Logger.Info("failed to connect to database",
-			zap.String("database destination", app.Cfg.DatabaseDsn),
-			zap.String("error message", err.Error()),
-		)
-		return nil, err
-	}
+	db := sqlx.MustOpen("pgx", app.Cfg.DatabaseDsn)
+	//if err != nil {
+	//	app.Logger.Info("failed to connect to database",
+	//		zap.String("database destination", app.Cfg.DatabaseDsn),
+	//		zap.String("error message", err.Error()),
+	//	)
+	//	return nil, err
+	//}
 	if db == nil {
 		app.Logger.Info("failed to connect to database")
 		return nil, errors.New("failed to connect to database")
 	}
 
-	err = db.PingContext(localCtx)
+	err := db.PingContext(localCtx)
 	if err != nil {
 		app.Logger.Info("failed to ping database, trying to work with local file storage",
 			zap.String("database destination", app.Cfg.DatabaseDsn),
@@ -53,8 +53,8 @@ func InitDBConnection(ctx context.Context, app *config.App) (*sql.DB, error) {
 	return db, nil
 }
 
-func runMigrations(db *sql.DB) error {
-	driver, err := postgres.WithInstance(db, &postgres.Config{})
+func runMigrations(db *sqlx.DB) error {
+	driver, err := postgres.WithInstance(db.DB, &postgres.Config{})
 	if err != nil {
 		return err
 	}

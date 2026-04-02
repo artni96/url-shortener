@@ -2,7 +2,6 @@ package healthcheck
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"net/http"
 
@@ -11,11 +10,12 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/jmoiron/sqlx"
 	"go.uber.org/zap"
 )
 
 type Handler struct {
-	db  *sql.DB
+	db  *sqlx.DB
 	log *zap.Logger
 	ctx *context.Context
 }
