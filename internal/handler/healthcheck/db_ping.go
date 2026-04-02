@@ -20,15 +20,15 @@ type Handler struct {
 	ctx *context.Context
 }
 
-func NewHealthCheckHandler(ctx *context.Context, db *sql.DB, log *zap.Logger) *Handler {
+func NewHealthCheckHandler(ctx *context.Context, app *config.App) *Handler {
 	return &Handler{
-		db:  db,
-		log: log,
+		db:  app.DB,
+		log: app.Logger,
 		ctx: ctx,
 	}
 }
 
-func (h *Handler) Ping(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) PingHandler(w http.ResponseWriter, r *http.Request) {
 
 	if h.db == nil {
 		h.log.Info("unable to ping database", zap.Error(errors.New("unable to ping database")))
@@ -46,15 +46,15 @@ func (h *Handler) Ping(w http.ResponseWriter, r *http.Request) {
 	return
 }
 
-func HealthCheckRouter(ctx *context.Context, db *sql.DB, log *zap.Logger) http.Handler {
+func HealthCheckRouter(ctx *context.Context, app *config.App) http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RealIP)
-	r.Use(logger.RequestLoggerMiddleware(log))
+	r.Use(logger.RequestLoggerMiddleware(app.Logger))
 	r.Use(middleware.Recoverer)
 	r.Use(config.GzipMiddleware)
 
-	handler := NewHealthCheckHandler(ctx, db, log)
-	r.Get("/", handler.Ping)
+	handler := NewHealthCheckHandler(ctx, app)
+	r.Get("/", handler.PingHandler)
 	return r
 }

@@ -16,14 +16,14 @@ import (
 )
 
 func run(cfg *config.Config) error {
+	ctx := context.Background()
 	appLogger, err := logger.InitLogger(cfg.DebugLevel)
+
 	app := &config.App{
 		DB:     nil,
 		Cfg:    cfg,
 		Logger: appLogger,
 	}
-
-	ctx := context.Background()
 
 	DBCon, err := db.InitDBConnection(ctx, app)
 	defer DBCon.Close()
@@ -40,7 +40,7 @@ func run(cfg *config.Config) error {
 
 	mainRouter := chi.NewRouter()
 	urlRouter := urls.URLRouter(&ctx, app, urlService)
-	healthRouter := healthcheck.HealthCheckRouter(&ctx, DBCon, appLogger)
+	healthRouter := healthcheck.HealthCheckRouter(&ctx, app)
 	mainRouter.Mount("/", urlRouter)
 	mainRouter.Mount("/ping", healthRouter)
 
