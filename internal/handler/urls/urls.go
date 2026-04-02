@@ -25,15 +25,15 @@ const urlPattern = `^https?:\/\/`
 type URLHandler struct {
 	responseURL string
 	urlService  service.URLServiceInterface
-	appLogger   *zap.Logger
+	logger      *zap.Logger
 	ctx         *context.Context
 }
 
-func NewURLHandler(ctx *context.Context, cfg *config.Config, urlService service.URLServiceInterface, appLogger *zap.Logger) *URLHandler {
+func NewURLHandler(ctx *context.Context, app *config.App, urlService service.URLServiceInterface) *URLHandler {
 	return &URLHandler{
-		responseURL: cfg.ResponseURL,
+		responseURL: app.Cfg.ResponseURL,
 		urlService:  urlService,
-		appLogger:   appLogger,
+		logger:      app.Logger,
 		ctx:         ctx,
 	}
 }
@@ -49,19 +49,19 @@ func (h *URLHandler) ShortenURLHandler(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		errMessage := "invalid request - empty body"
-		ErrorResponse(w, errMessage, http.StatusBadRequest, h.appLogger)
+		ErrorResponse(w, errMessage, http.StatusBadRequest, h.logger)
 		return
 	}
 
 	if err = json.Unmarshal(buf.Bytes(), &body); err != nil {
 		errMessage := "could not unmarshal request body"
-		ErrorResponse(w, errMessage, http.StatusBadRequest, h.appLogger)
+		ErrorResponse(w, errMessage, http.StatusBadRequest, h.logger)
 		return
 	}
 
 	if !isURLCorrect(body.URL) {
 		errMessage := fmt.Sprintf("url '%s' is invalid", body.URL)
-		ErrorResponse(w, errMessage, http.StatusBadRequest, h.appLogger)
+		ErrorResponse(w, errMessage, http.StatusBadRequest, h.logger)
 		return
 	}
 
@@ -69,11 +69,11 @@ func (h *URLHandler) ShortenURLHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, service.ErrFailedToCreated) {
 			errMessage := err.Error()
-			ErrorResponse(w, errMessage, http.StatusInternalServerError, h.appLogger)
+			ErrorResponse(w, errMessage, http.StatusInternalServerError, h.logger)
 			return
 		} else {
 			errMessage := fmt.Sprintf("Could not create short URL for %s", body.URL)
-			ErrorResponse(w, errMessage, http.StatusInternalServerError, h.appLogger)
+			ErrorResponse(w, errMessage, http.StatusInternalServerError, h.logger)
 			return
 		}
 	}
@@ -84,7 +84,7 @@ func (h *URLHandler) ShortenURLHandler(w http.ResponseWriter, r *http.Request) {
 	resp, err := json.Marshal(responseData)
 	if err != nil {
 		errMessage := fmt.Sprintf("Could not create short URL for %s", body.URL)
-		ErrorResponse(w, errMessage, http.StatusInternalServerError, h.appLogger)
+		ErrorResponse(w, errMessage, http.StatusInternalServerError, h.logger)
 		return
 	}
 	w.Write(resp)
@@ -146,15 +146,15 @@ func (h *URLHandler) GetURLHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusTemporaryRedirect)
 }
 
-func URLRouter(ctx *context.Context, cfg *config.Config, urlService service.URLServiceInterface, appLogger *zap.Logger) chi.Router {
+func URLRouter(ctx *context.Context, app *config.App, urlService service.URLServiceInterface) chi.Router {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RealIP)
-	r.Use(logger.RequestLoggerMiddleware(appLogger))
+	r.Use(logger.RequestLoggerMiddleware(app.Logger))
 	r.Use(middleware.Recoverer)
 	r.Use(config.GzipMiddleware)
 
-	urlHandler := NewURLHandler(ctx, cfg, urlService, appLogger)
+	urlHandler := NewURLHandler(ctx, app, urlService)
 
 	r.Route("/", func(r chi.Router) {
 		r.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {

@@ -3,6 +3,7 @@ package repository
 import (
 	"bufio"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,28 +21,33 @@ var ErrURLNotFound = errors.New("url not found")
 type URLRepositoryInterface interface {
 	GetByShortURL(ctx context.Context, shortURL string) (string, error)
 	Create(ctx context.Context, originalURL, shortURL string) (model.URLEntity, error)
-	SaveURL(ctx context.Context, url model.URLEntity) error
+	SaveURLToLocalStorage(url model.URLEntity) error
 }
 type LocalURLRepository struct {
-	mu      sync.RWMutex
-	urls    map[string]string
-	app     *config.App
-	storage string
+	mu     sync.RWMutex
+	urls   map[string]string
+	db     *sql.DB
+	logger *zap.Logger
 }
 
 func (repo *LocalURLRepository) Create(ctx context.Context, originalURL, shortURL string) (model.URLEntity, error) {
 	repo.mu.Lock()
 	defer repo.mu.Unlock()
 
-	if repo.app.DB != nil {
+	if repo.db != nil {
+		query := "SELECT * FROM urls WHERE short_url = $1"
+		row := repo.db.QueryRowContext(ctx, query, shortURL)
+
 		entity := model.URLEntity{}
-		row := repo.app.DB.QueryRowContext(ctx, "SELECT * FROM urls WHERE short_url = $1", shortURL)
 		err := row.Scan(&entity.OriginalURL, &entity.ShortURL)
+
 		if err == nil {
 			return model.URLEntity{}, err
 		}
 
-		_, err = repo.app.DB.ExecContext(ctx, "INSERT INTO urls (short_url, original_url) VALUES ($1, $2)", shortURL, originalURL)
+		query = "INSERT INTO urls (short_url, original_url) VALUES ($1, $2)"
+
+		_, err = repo.db.ExecContext(ctx, query, shortURL, originalURL)
 		if err != nil {
 			return model.URLEntity{}, err
 		}
@@ -67,8 +73,10 @@ func (repo *LocalURLRepository) GetByShortURL(ctx context.Context, shortURL stri
 	defer repo.mu.RUnlock()
 	var entity string
 
-	if repo.app.DB != nil {
-		row := repo.app.DB.QueryRowContext(ctx, "SELECT original_url FROM urls where short_url = $1", shortURL)
+	if repo.db != nil {
+		query := "SELECT original_url FROM urls where short_url = $1"
+		row := repo.db.QueryRowContext(ctx, query, shortURL)
+
 		err := row.Scan(&entity)
 		if err != nil {
 			return "", err
@@ -84,13 +92,10 @@ func (repo *LocalURLRepository) GetByShortURL(ctx context.Context, shortURL stri
 	return entity, nil
 }
 
-func (repo *LocalURLRepository) SaveURL(ctx context.Context, urlEntity model.URLEntity) error {
+func (repo *LocalURLRepository) SaveURLToLocalStorage(urlEntity model.URLEntity) error {
 	repo.mu.Lock()
 	defer repo.mu.Unlock()
 
-	if repo.app.DB != nil {
-
-	}
 	_, ok := repo.urls[urlEntity.ShortURL]
 	if ok {
 		return fmt.Errorf("%w: %s", ErrURLAlreadyExists, urlEntity.ShortURL)
@@ -165,7 +170,7 @@ func (s *FileScanner) CollectData() ([]model.URLEntity, error) {
 	return result, nil
 }
 
-func (repo *LocalURLRepository) uploadLocalStorage(ctx context.Context, filepath string, log *zap.Logger) error {
+func (repo *LocalURLRepository) uploadLocalStorage(filepath string) error {
 	fileReader, err := NewFileScanner(filepath)
 	if fileReader == nil {
 		return nil
@@ -173,26 +178,26 @@ func (repo *LocalURLRepository) uploadLocalStorage(ctx context.Context, filepath
 	defer func(fileReader *FileScanner) {
 		err := fileReader.Close()
 		if err != nil {
-			log.Info("could not close file reader", zap.String("filepath", filepath))
+			repo.logger.Info("could not close file reader", zap.String("filepath", filepath))
 		}
 	}(fileReader)
 
 	if err != nil {
-		log.Info("could not initialize NewFileScanner",
+		repo.logger.Info("could not initialize NewFileScanner",
 			zap.String("error", err.Error()))
 		return nil
 	}
 	result, err := fileReader.CollectData()
 	if err != nil {
-		log.Error("could not collect data from file",
+		repo.logger.Info("could not collect data from file",
 			zap.String("filepath", filepath),
 			zap.String("error", err.Error()))
 		return err
 	}
 	for _, object := range result {
-		err := repo.SaveURL(ctx, object)
+		err := repo.SaveURLToLocalStorage(object)
 		if err != nil {
-			log.Error("could not upload URL Entity to local storage",
+			repo.logger.Info("could not upload URL Entity to local storage",
 				zap.String("ShortURL", object.ShortURL),
 				zap.String("OriginalURL", object.OriginalURL))
 			return err
@@ -201,19 +206,24 @@ func (repo *LocalURLRepository) uploadLocalStorage(ctx context.Context, filepath
 	return nil
 }
 
-func NewURLRepository(ctx *context.Context, app *config.App, log *zap.Logger) (*LocalURLRepository, error) {
-	repo := LocalURLRepository{urls: make(map[string]string), app: app}
-	if app.DB == nil && app.Cfg.DatabaseDsn != "" {
-		err := repo.uploadLocalStorage(*ctx, app.Cfg.FileStoragePath, log)
+func NewURLRepository(app *config.App) (*LocalURLRepository, error) {
+	repo := LocalURLRepository{
+		urls:   make(map[string]string),
+		db:     app.DB,
+		logger: app.Logger,
+	}
+
+	if repo.db == nil && app.Cfg.DatabaseDsn != "" {
+		err := repo.uploadLocalStorage(app.Cfg.FileStoragePath)
 		if err != nil {
-			log.Info("could not upload data from the file",
+			repo.logger.Info("could not upload data from the file",
 				zap.String("filepath", app.Cfg.FileStoragePath),
 				zap.String("error", err.Error()))
 			return nil, err
 		}
-		log.Info("filepath for file storage is not set, keep working with in memory storage")
+		repo.logger.Info("filepath for file storage is not set, keep working with in memory storage")
 		return &repo, nil
 	}
-	log.Info("successfully uploaded data from the file")
+	repo.logger.Info("successfully uploaded data from the file")
 	return &repo, nil
 }

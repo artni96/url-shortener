@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"flag"
 	"os"
+
+	"go.uber.org/zap"
 )
 
 type Config struct {
@@ -57,6 +59,7 @@ func ParseFlags() (*Config, error) {
 }
 
 type App struct {
-	DB  *sql.DB
-	Cfg *Config
+	DB     *sql.DB
+	Cfg    *Config
+	Logger *zap.Logger
 }

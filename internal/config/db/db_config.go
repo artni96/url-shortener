@@ -13,50 +13,41 @@ import (
 	"go.uber.org/zap"
 )
 
-type dBConnectionSettings struct {
-	Host     string
-	Port     string
-	User     string
-	Password string
-	DBName   string
-	SSLMode  string
-}
-
-func InitDBConnection(ctx context.Context, cfg *config.Config, log *zap.Logger) (*sql.DB, error) {
+func InitDBConnection(ctx context.Context, app *config.App) (*sql.DB, error) {
 	localCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	if cfg.DatabaseDsn == "" {
-		log.Info("database dsn is empty, cannot connect to database")
+	if app.Cfg.DatabaseDsn == "" {
+		app.Logger.Info("database dsn is empty, cannot connect to database")
 		return nil, errors.New("database dsn is required")
 	}
-	db, err := sql.Open("pgx", cfg.DatabaseDsn)
+	db, err := sql.Open("pgx", app.Cfg.DatabaseDsn)
 	if err != nil {
-		log.Info("failed to connect to database",
-			zap.String("database destination", cfg.DatabaseDsn),
+		app.Logger.Info("failed to connect to database",
+			zap.String("database destination", app.Cfg.DatabaseDsn),
 			zap.String("error message", err.Error()),
 		)
 		return nil, err
 	}
 	if db == nil {
-		log.Info("failed to connect to database")
+		app.Logger.Info("failed to connect to database")
 		return nil, errors.New("failed to connect to database")
 	}
 
 	err = db.PingContext(localCtx)
 	if err != nil {
-		log.Info("failed to ping database, trying to work with local file storage",
-			zap.String("database destination", cfg.DatabaseDsn),
+		app.Logger.Info("failed to ping database, trying to work with local file storage",
+			zap.String("database destination", app.Cfg.DatabaseDsn),
 			zap.String("error message", err.Error()),
 		)
 		return nil, err
 	}
 
 	if err := runMigrations(db); err != nil {
-		log.Info("failed to run migrations",
+		app.Logger.Info("failed to run migrations",
 			zap.String("error message", err.Error()),
 		)
 	} else {
-		log.Info("Migrations completed successfully")
+		app.Logger.Info("Migrations completed successfully")
 	}
 
 	return db, nil

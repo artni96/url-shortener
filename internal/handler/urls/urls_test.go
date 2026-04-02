@@ -31,22 +31,23 @@ func TestShortenURL(t *testing.T) {
 		FileStoragePath: testFile,
 	}
 
-	testDB, err := db.InitDBConnection(ctx, &cfg, testLogger)
-	if err != nil {
-		testDB = nil
-	}
-
 	app := config.App{
-		DB:  testDB,
-		Cfg: &cfg,
+		DB:     nil,
+		Cfg:    &cfg,
+		Logger: testLogger,
 	}
 
-	urlRepo, err := repository.NewURLRepository(&ctx, &app, testLogger)
+	testDB, err := db.InitDBConnection(ctx, &app)
+	if err == nil {
+		app.DB = testDB
+	}
+
+	urlRepo, err := repository.NewURLRepository(&app)
 	if err != nil {
 		t.Fatal(err)
 	}
 	urlService := service.NewURLService(urlRepo, &app)
-	h := NewURLHandler(&ctx, &cfg, urlService, testLogger)
+	h := NewURLHandler(&ctx, &app, urlService)
 
 	type want struct {
 		contentType string
@@ -131,22 +132,23 @@ func TestCreateURLHandler(t *testing.T) {
 		FileStoragePath: testFile,
 	}
 
-	testDB, err := db.InitDBConnection(ctx, &cfg, testLogger)
-	if err != nil {
-		testDB = nil
-	}
-
 	app := config.App{
-		DB:  testDB,
-		Cfg: &cfg,
+		DB:     nil,
+		Cfg:    &cfg,
+		Logger: testLogger,
 	}
 
-	urlRepo, err := repository.NewURLRepository(&ctx, &app, testLogger)
+	testDB, err := db.InitDBConnection(ctx, &app)
+	if err == nil {
+		app.DB = testDB
+	}
+
+	urlRepo, err := repository.NewURLRepository(&app)
 	if err != nil {
 		t.Fatal(err)
 	}
 	urlService := service.NewURLService(urlRepo, &app)
-	h := NewURLHandler(&ctx, &cfg, urlService, testLogger)
+	h := NewURLHandler(&ctx, &app, urlService)
 
 	type want struct {
 		status      int
@@ -214,6 +216,7 @@ func TestGetURLHandler(t *testing.T) {
 	tempDir := t.TempDir()
 	testFile := filepath.Join(tempDir, "data.json")
 	testLogger := zap.NewNop()
+
 	ctx := context.Background()
 
 	cfg := config.Config{
@@ -222,22 +225,24 @@ func TestGetURLHandler(t *testing.T) {
 		FileStoragePath: testFile,
 	}
 
-	testDB, err := db.InitDBConnection(ctx, &cfg, testLogger)
-	if err != nil {
-		testDB = nil
-	}
-
 	app := config.App{
-		DB:  testDB,
-		Cfg: &cfg,
+		DB:     nil,
+		Cfg:    &cfg,
+		Logger: testLogger,
 	}
 
-	urlRepo, err := repository.NewURLRepository(&ctx, &app, testLogger)
+	testDB, err := db.InitDBConnection(ctx, &app)
+	if err == nil {
+		app.DB = testDB
+	}
+
+	urlRepo, err := repository.NewURLRepository(&app)
 	if err != nil {
 		t.Fatal(err)
 	}
 	urlService := service.NewURLService(urlRepo, &app)
-	h := NewURLHandler(&ctx, &cfg, urlService, testLogger)
+	h := NewURLHandler(&ctx, &app, urlService)
+
 	type request struct {
 		method string
 		url    string

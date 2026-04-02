@@ -16,35 +16,36 @@ import (
 )
 
 func run(cfg *config.Config) error {
-	NewApp := &config.App{
-		DB:  nil,
-		Cfg: cfg,
+	appLogger, err := logger.InitLogger(cfg.DebugLevel)
+	app := &config.App{
+		DB:     nil,
+		Cfg:    cfg,
+		Logger: appLogger,
 	}
 
 	ctx := context.Background()
-	appLogger, err := logger.InitLogger(NewApp.Cfg.DebugLevel)
 
-	DBCon, err := db.InitDBConnection(ctx, NewApp.Cfg, appLogger)
+	DBCon, err := db.InitDBConnection(ctx, app)
 	defer DBCon.Close()
 
 	if DBCon != nil {
-		NewApp.DB = DBCon
+		app.DB = DBCon
 	}
 
-	urlRepository, err := repository.NewURLRepository(&ctx, NewApp, appLogger)
+	urlRepository, err := repository.NewURLRepository(app)
 	if err != nil {
 		return err
 	}
-	urlService := service.NewURLService(urlRepository, NewApp)
+	urlService := service.NewURLService(urlRepository, app)
 
 	mainRouter := chi.NewRouter()
-	urlRouter := urls.URLRouter(&ctx, NewApp.Cfg, urlService, appLogger)
+	urlRouter := urls.URLRouter(&ctx, app, urlService)
 	healthRouter := healthcheck.HealthCheckRouter(&ctx, DBCon, appLogger)
 	mainRouter.Mount("/", urlRouter)
 	mainRouter.Mount("/ping", healthRouter)
 
 	appLogger.Info("Starting server",
-		zap.String("server address", NewApp.Cfg.ServerAddress),
+		zap.String("server address", app.Cfg.ServerAddress),
 	)
-	return http.ListenAndServe(NewApp.Cfg.ServerAddress, mainRouter)
+	return http.ListenAndServe(app.Cfg.ServerAddress, mainRouter)
 }
