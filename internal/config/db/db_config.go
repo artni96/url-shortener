@@ -14,20 +14,14 @@ import (
 )
 
 func InitDBConnection(ctx context.Context, app *config.App) (*sqlx.DB, error) {
-	localCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-	defer cancel()
 	if app.Cfg.DatabaseDsn == "" {
 		app.Logger.Info("database dsn is empty, cannot connect to database")
 		return nil, errors.New("database dsn is required")
 	}
+	localCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+
 	db := sqlx.MustOpen("pgx", app.Cfg.DatabaseDsn)
-	//if err != nil {
-	//	app.Logger.Info("failed to connect to database",
-	//		zap.String("database destination", app.Cfg.DatabaseDsn),
-	//		zap.String("error message", err.Error()),
-	//	)
-	//	return nil, err
-	//}
 	if db == nil {
 		app.Logger.Info("failed to connect to database")
 		return nil, errors.New("failed to connect to database")

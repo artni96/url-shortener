@@ -26,10 +26,10 @@ func run(cfg *config.Config) error {
 	}
 
 	DBCon, err := db.InitDBConnection(ctx, app)
-	defer DBCon.Close()
-
+	
 	if DBCon != nil {
 		app.DB = DBCon
+		defer DBCon.Close()
 	}
 
 	urlRepository, err := repository.NewURLRepository(app)
