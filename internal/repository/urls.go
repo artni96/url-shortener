@@ -20,6 +20,7 @@ var ErrURLNotFound = errors.New("url not found")
 var ErrURLNotCreated = errors.New("could not create url")
 
 type URLRepositoryInterface interface {
+	GetList(ctx context.Context) ([]model.URLEntity, error)
 	GetByShortURL(ctx context.Context, shortURL string) (string, error)
 	Create(ctx context.Context, originalURL, shortURL string) (model.URLEntity, error)
 	SaveURLToLocalStorage(url model.URLEntity) error
@@ -54,7 +55,7 @@ func (repo *LocalURLRepository) Create(ctx context.Context, originalURL, shortUR
 		if result == nil {
 			return model.URLEntity{}, ErrURLNotCreated
 		}
-		
+
 		entity.OriginalURL = originalURL
 		entity.ShortURL = shortURL
 		return entity, nil
@@ -93,6 +94,27 @@ func (repo *LocalURLRepository) GetByShortURL(ctx context.Context, shortURL stri
 	}
 
 	return entity, nil
+}
+
+func (repo *LocalURLRepository) GetList(ctx context.Context) ([]model.URLEntity, error) {
+	repo.mu.RLock()
+	defer repo.mu.RUnlock()
+	var entities []model.URLEntity
+
+	if repo.db != nil {
+		selectQuery := "SELECT original_url, short_url FROM urls"
+		err := repo.db.SelectContext(ctx, &entities, selectQuery)
+
+		if err != nil {
+			return nil, err
+		}
+		return entities, nil
+	}
+
+	for shortURL, originalURL := range repo.urls {
+		entities = append(entities, model.URLEntity{OriginalURL: originalURL, ShortURL: shortURL})
+	}
+	return entities, nil
 }
 
 func (repo *LocalURLRepository) SaveURLToLocalStorage(urlEntity model.URLEntity) error {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/artni96/url-shortener/internal/config"
+	"github.com/artni96/url-shortener/internal/model"
 	"github.com/artni96/url-shortener/internal/repository"
 	"github.com/artni96/url-shortener/internal/utility"
 	"go.uber.org/zap"
@@ -14,6 +15,7 @@ import (
 var ErrFailedToCreated = errors.New("could not create ShortURL")
 
 type URLServiceInterface interface {
+	GetList(ctx context.Context) ([]model.URLEntity, error)
 	GetByShortURL(ctx context.Context, urlID string) (string, error)
 	Create(ctx context.Context, urlStr string) (string, error)
 }
@@ -21,6 +23,14 @@ type URLService struct {
 	repo repository.URLRepositoryInterface
 	log  *zap.Logger
 	app  *config.App
+}
+
+func (s *URLService) GetList(ctx context.Context) ([]model.URLEntity, error) {
+	result, err := s.repo.GetList(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 func (s *URLService) GetByShortURL(ctx context.Context, shortURL string) (string, error) {

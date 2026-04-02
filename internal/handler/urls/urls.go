@@ -141,9 +141,23 @@ func (h *URLHandler) GetURLHandler(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("URL not found"))
 		return
 	}
-	w.Header().Set("Content-Type", "text/plain")
+	//w.Header().Set("Content-Type", "text/plain")
 	w.Header().Set("Location", redirectTo)
 	w.WriteHeader(http.StatusTemporaryRedirect)
+}
+
+func (h *URLHandler) GetListHandler(w http.ResponseWriter, r *http.Request) {
+	urlList, err := h.urlService.GetList(*h.ctx)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("Could not get the list of urls"))
+	}
+	w.WriteHeader(http.StatusOK)
+
+	if err = json.NewEncoder(w).Encode(urlList); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
 }
 
 func URLRouter(ctx *context.Context, app *config.App, urlService service.URLServiceInterface) chi.Router {
@@ -161,6 +175,7 @@ func URLRouter(ctx *context.Context, app *config.App, urlService service.URLServ
 			w.WriteHeader(http.StatusBadRequest)
 			w.Write([]byte(fmt.Sprintf("Method %s is forbidden", r.Method)))
 		})
+		r.Get("/", urlHandler.GetListHandler)
 		r.Post("/", urlHandler.CreateURLHandler)
 		r.Post("/api/shorten", urlHandler.ShortenURLHandler)
 
