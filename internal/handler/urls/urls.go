@@ -141,7 +141,7 @@ func (h *URLHandler) GetURLHandler(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("URL not found"))
 		return
 	}
-	//w.Header().Set("Content-Type", "text/plain")
+	w.Header().Set("Content-Type", "text/plain")
 	w.Header().Set("Location", redirectTo)
 	w.WriteHeader(http.StatusTemporaryRedirect)
 }
@@ -153,7 +153,7 @@ func (h *URLHandler) GetListHandler(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("Could not get the list of urls"))
 	}
 	w.WriteHeader(http.StatusOK)
-
+	w.Header().Set("Content-Type", "application/json")
 	if err = json.NewEncoder(w).Encode(urlList); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
