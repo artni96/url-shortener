@@ -2,6 +2,8 @@ package urls
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -72,6 +74,7 @@ func TestShortenURL(t *testing.T) {
 			want: want{
 				contentType: "application/json",
 				status:      http.StatusCreated,
+				message:     `\{\"result\":\"https?://[^\"]+\"\}`,
 			},
 		},
 		{
@@ -110,8 +113,14 @@ func TestShortenURL(t *testing.T) {
 
 			assert.Equal(t, tt.want.status, res.StatusCode)
 			assert.Equal(t, tt.want.contentType, res.Header.Get("Content-Type"))
+			strBody, err := io.ReadAll(res.Body)
+			if err != nil {
+				t.Fatal(err)
+			}
 			if tt.want.status == http.StatusBadRequest {
-				assert.JSONEq(t, tt.want.message, w.Body.String())
+				assert.JSONEq(t, tt.want.message, string(strBody))
+			} else {
+				assert.Regexpf(t, tt.want.message, string(strBody), "expected message didn't match")
 			}
 			assert.NotEmpty(t, res.Body)
 			defer res.Body.Close()
@@ -153,6 +162,7 @@ func TestCreateURLHandler(t *testing.T) {
 	type want struct {
 		status      int
 		contentType string
+		message     string
 	}
 	type request struct {
 		body   []byte
@@ -168,6 +178,7 @@ func TestCreateURLHandler(t *testing.T) {
 			want: want{
 				status:      http.StatusCreated,
 				contentType: "text/plain",
+				message:     `https?://[^\"]+`,
 			},
 			request: request{
 				method: http.MethodPost,
@@ -207,6 +218,16 @@ func TestCreateURLHandler(t *testing.T) {
 			assert.Equal(t, tt.want.status, res.StatusCode)
 			assert.Equal(t, tt.want.contentType, res.Header.Get("Content-Type"))
 			assert.NotEmpty(t, res.Body)
+
+			if tt.want.status == http.StatusCreated {
+				strBody, err := io.ReadAll(res.Body)
+				if err != nil {
+					t.Fatal(err)
+				}
+				fmt.Println(string(strBody))
+				assert.Regexpf(t, tt.want.message, string(strBody), "expected message didn't match")
+			}
+
 			defer res.Body.Close()
 		})
 	}
@@ -305,6 +326,115 @@ func TestGetURLHandler(t *testing.T) {
 				assert.Equal(t, tt.want.redirectTo, res.Header.Get("Location"))
 			}
 			defer res.Body.Close()
+		})
+	}
+}
+
+func TestBulkCreateURLHandler(t *testing.T) {
+	tempDir := t.TempDir()
+	testFile := filepath.Join(tempDir, "data.json")
+	testLogger := zap.NewNop()
+
+	ctx := context.Background()
+	cfg := config.Config{
+		ServerAddress:   "localhost:8080",
+		ResponseDomain:  "http://localhost:8080",
+		FileStoragePath: testFile,
+	}
+
+	app := config.App{
+		DB:     nil,
+		Cfg:    &cfg,
+		Logger: testLogger,
+	}
+
+	testDB, err := db.InitDBConnection(ctx, &app)
+	if err == nil {
+		app.DB = testDB
+	}
+
+	urlRepo, err := repository.NewURLRepository(&app)
+	if err != nil {
+		t.Fatal(err)
+	}
+	urlService := service.NewURLService(urlRepo, &app)
+	h := NewURLHandler(&ctx, &app, urlService)
+
+	type want struct {
+		status      int
+		contentType string
+		message     string
+	}
+	type request struct {
+		body   string
+		method string
+	}
+	tests := []struct {
+		name    string
+		request request
+		want    want
+	}{
+		{
+			name: "success",
+			request: request{
+				body: `[
+						{
+							"correlation_id":"1",
+							"original_url":"http://dqj7vsrbcet.com/ud5irar"
+						},
+						{
+							"correlation_id":"2",
+							"original_url":"http://asknw0dlqrb.net/r4ez0dbf"
+						}
+					]`,
+				method: http.MethodPost,
+			},
+			want: want{
+				status:      http.StatusCreated,
+				contentType: "application/json",
+				message:     `\[\{\"correlation_id\":\"[^\"]+\",\"short_url\":\"https?://[^\"]+\"\}(,\{\"correlation_id\":\"[^\"]+\",\"short_url\":\"https?://[^\"]+\"\})*\]`,
+			},
+		},
+
+		{
+			name: "wrong body",
+			request: request{
+				body: `[
+					{
+						"correlation_idd":"1",
+						"original_url":"http://dqj7vsrbcet.com/ud5irar"
+					},
+					{
+						"correlation_idd":"2",
+						"original_url":"http://asknw0dlqrb.net/r4ez0dbf"
+					}
+				]`,
+				method: http.MethodPost,
+			},
+			want: want{
+				status:      http.StatusBadRequest,
+				contentType: "application/json",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reqBody := strings.NewReader(tt.request.body)
+
+			req := httptest.NewRequest(tt.request.method, "/", reqBody)
+			fmt.Println(tt.request.method)
+			w := httptest.NewRecorder()
+			h.BulkCreateURLHandler(w, req)
+			res := w.Result()
+			defer res.Body.Close()
+
+			assert.Equal(t, tt.want.status, res.StatusCode)
+			assert.Equal(t, tt.want.contentType, res.Header.Get("Content-Type"))
+			strBody, err := io.ReadAll(res.Body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			assert.Regexpf(t, tt.want.message, string(strBody), "expected message didn't match")
 		})
 	}
 }

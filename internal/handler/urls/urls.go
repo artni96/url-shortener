@@ -109,6 +109,16 @@ func (h *URLHandler) BulkCreateURLHandler(w http.ResponseWriter, r *http.Request
 		ErrorResponse(w, errMessage, http.StatusBadRequest, h.logger)
 		return
 	}
+
+	// валидация входных данных
+	for _, url := range body {
+		if url.OriginalURL == "" || url.CorrelationID == "" {
+			errMessage := "invalid body request"
+			ErrorResponse(w, errMessage, http.StatusBadRequest, h.logger)
+			return
+		}
+	}
+
 	responseData, err := h.urlService.BulkCreate(*h.ctx, body, h.responseDomain)
 	if err != nil {
 		errorMessage := "could not bulk create short URL"
@@ -211,11 +221,12 @@ func URLRouter(ctx *context.Context, app *config.App, urlService service.URLServ
 			w.WriteHeader(http.StatusBadRequest)
 			w.Write([]byte(fmt.Sprintf("Method %s is forbidden", r.Method)))
 		})
+		r.Post("/api/shorten", urlHandler.ShortenURLHandler)
+		r.Post("/api/shorten/batch", urlHandler.BulkCreateURLHandler)
 		r.Get("/", urlHandler.GetListHandler)
 		r.Post("/", urlHandler.CreateURLHandler)
-		r.Post("/api/shorten", urlHandler.ShortenURLHandler)
 		r.Get("/{id}", urlHandler.GetURLHandler)
-		r.Post("/api/shorten/batch", urlHandler.BulkCreateURLHandler)
+
 	})
 	return r
 }
