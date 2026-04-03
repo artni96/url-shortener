@@ -27,7 +27,7 @@ func TestShortenURL(t *testing.T) {
 
 	cfg := config.Config{
 		ServerAddress:   "localhost:8080",
-		ResponseURL:     "http://localhost:8080",
+		ResponseDomain:  "http://localhost:8080",
 		FileStoragePath: testFile,
 	}
 
@@ -128,7 +128,7 @@ func TestCreateURLHandler(t *testing.T) {
 
 	cfg := config.Config{
 		ServerAddress:   "localhost:8080",
-		ResponseURL:     "http://localhost:8080",
+		ResponseDomain:  "http://localhost:8080",
 		FileStoragePath: testFile,
 	}
 
@@ -221,7 +221,7 @@ func TestGetURLHandler(t *testing.T) {
 
 	cfg := config.Config{
 		ServerAddress:   "localhost:8080",
-		ResponseURL:     "http://localhost:8080",
+		ResponseDomain:  "http://localhost:8080",
 		FileStoragePath: testFile,
 	}
 

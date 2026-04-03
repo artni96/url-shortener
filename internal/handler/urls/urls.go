@@ -23,18 +23,18 @@ import (
 const urlPattern = `^https?:\/\/`
 
 type URLHandler struct {
-	responseURL string
-	urlService  service.URLServiceInterface
-	logger      *zap.Logger
-	ctx         *context.Context
+	responseDomain string
+	urlService     service.URLServiceInterface
+	logger         *zap.Logger
+	ctx            *context.Context
 }
 
 func NewURLHandler(ctx *context.Context, app *config.App, urlService service.URLServiceInterface) *URLHandler {
 	return &URLHandler{
-		responseURL: app.Cfg.ResponseURL,
-		urlService:  urlService,
-		logger:      app.Logger,
-		ctx:         ctx,
+		responseDomain: app.Cfg.ResponseDomain,
+		urlService:     urlService,
+		logger:         app.Logger,
+		ctx:            ctx,
 	}
 }
 
@@ -65,7 +65,7 @@ func (h *URLHandler) ShortenURLHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	urlID, err := h.urlService.Create(*h.ctx, body.URL)
+	shortURL, err := h.urlService.Create(*h.ctx, body.URL, h.responseDomain)
 	if err != nil {
 		if errors.Is(err, service.ErrFailedToCreated) {
 			errMessage := err.Error()
@@ -77,13 +77,49 @@ func (h *URLHandler) ShortenURLHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-
-	responseData.Result = fmt.Sprintf("%s/%s", h.responseURL, urlID)
+	responseData.Result = shortURL
+	//responseData.Result = fmt.Sprintf("%s/%s", h.responseURL, shortURL)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	resp, err := json.Marshal(responseData)
 	if err != nil {
 		errMessage := fmt.Sprintf("Could not create short URL for %s", body.URL)
+		ErrorResponse(w, errMessage, http.StatusInternalServerError, h.logger)
+		return
+	}
+	w.Write(resp)
+}
+
+func (h *URLHandler) BulkCreateURLHandler(w http.ResponseWriter, r *http.Request) {
+
+	var body []model.URLBulkCreateRequest
+	var buf bytes.Buffer
+
+	_, err := buf.ReadFrom(r.Body)
+	defer r.Body.Close()
+
+	if err != nil {
+		errMessage := "invalid request - empty body"
+		ErrorResponse(w, errMessage, http.StatusBadRequest, h.logger)
+		return
+	}
+
+	if err = json.Unmarshal(buf.Bytes(), &body); err != nil {
+		errMessage := "could not unmarshal request body"
+		ErrorResponse(w, errMessage, http.StatusBadRequest, h.logger)
+		return
+	}
+	responseData, err := h.urlService.BulkCreate(*h.ctx, body, h.responseDomain)
+	if err != nil {
+		errorMessage := "could not bulk create short URL"
+		ErrorResponse(w, errorMessage, http.StatusInternalServerError, h.logger)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	resp, err := json.Marshal(responseData)
+	if err != nil {
+		errMessage := "could not marshal request body"
 		ErrorResponse(w, errMessage, http.StatusInternalServerError, h.logger)
 		return
 	}
@@ -115,7 +151,7 @@ func (h *URLHandler) CreateURLHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	urlID, err := h.urlService.Create(*h.ctx, urlStr)
+	shortURL, err := h.urlService.Create(*h.ctx, urlStr, h.responseDomain)
 	if err != nil {
 		if errors.Is(err, service.ErrFailedToCreated) {
 			w.Header().Set("Content-Type", "text/plain")
@@ -129,7 +165,7 @@ func (h *URLHandler) CreateURLHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusCreated)
-	w.Write([]byte(fmt.Sprintf("%s/%s", h.responseURL, urlID)))
+	w.Write([]byte(shortURL))
 
 	defer r.Body.Close()
 }
@@ -178,8 +214,8 @@ func URLRouter(ctx *context.Context, app *config.App, urlService service.URLServ
 		r.Get("/", urlHandler.GetListHandler)
 		r.Post("/", urlHandler.CreateURLHandler)
 		r.Post("/api/shorten", urlHandler.ShortenURLHandler)
-
 		r.Get("/{id}", urlHandler.GetURLHandler)
+		r.Post("/api/shorten/batch", urlHandler.BulkCreateURLHandler)
 	})
 	return r
 }

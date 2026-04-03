@@ -18,12 +18,15 @@ import (
 var ErrURLAlreadyExists = errors.New("url already exists")
 var ErrURLNotFound = errors.New("url not found")
 var ErrURLNotCreated = errors.New("could not create url")
+var ErrURLListIsNotUnique = errors.New("url list is not unique")
 
 type URLRepositoryInterface interface {
 	GetList(ctx context.Context) ([]model.URLEntity, error)
 	GetByShortURL(ctx context.Context, shortURL string) (string, error)
 	Create(ctx context.Context, originalURL, shortURL string) (model.URLEntity, error)
+	BulkCreate(ctx context.Context, urls []model.URLBulkCreate) ([]model.URLBulkCreate, error)
 	SaveURLToLocalStorage(url model.URLEntity) error
+	IsURLListUnique(ctx context.Context, shortURLList []string) (bool, error)
 }
 type LocalURLRepository struct {
 	mu     sync.RWMutex
@@ -117,6 +120,78 @@ func (repo *LocalURLRepository) GetList(ctx context.Context) ([]model.URLEntity,
 	return entities, nil
 }
 
+func (repo *LocalURLRepository) BulkCreate(ctx context.Context, urls []model.URLBulkCreate) ([]model.URLBulkCreate, error) {
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
+
+	var result []model.URLBulkCreate
+
+	if repo.db != nil {
+
+		query := "INSERT INTO urls (short_url, original_url) VALUES ($1, $2)"
+		stmt, err := repo.db.PrepareContext(ctx, query)
+		if err != nil {
+			return nil, err
+		}
+
+		tx, err := repo.db.BeginTxx(ctx, nil)
+		if err != nil {
+			return nil, err
+		}
+		for _, url := range urls {
+			_, err = stmt.ExecContext(ctx, url.ShortURL, url.OriginalURL)
+			if err != nil {
+				tx.Rollback()
+				return nil, err
+			}
+			entity := model.URLBulkCreate{
+				CorrelationID: url.CorrelationID,
+				ShortURL:      url.ShortURL,
+				OriginalURL:   url.OriginalURL,
+			}
+			result = append(result, entity)
+
+		}
+		return result, tx.Commit()
+	}
+
+	for _, url := range urls {
+		repo.urls[url.ShortURL] = url.OriginalURL
+		entity := model.URLBulkCreate{
+			CorrelationID: url.CorrelationID,
+			ShortURL:      url.ShortURL,
+			OriginalURL:   url.OriginalURL,
+		}
+		result = append(result, entity)
+	}
+
+	return result, nil
+}
+
+func (repo *LocalURLRepository) IsURLListUnique(ctx context.Context, shortURLList []string) (bool, error) {
+	if repo.db != nil {
+		query := "SELECT original_url FROM urls WHERE short_url IN ($1)"
+		stmt, err := repo.db.PrepareContext(ctx, query)
+		if err != nil {
+			return false, err
+		}
+		result, err := stmt.QueryContext(ctx, shortURLList)
+		if err != nil {
+			return false, err
+		}
+		if result != nil {
+			return false, ErrURLListIsNotUnique
+		}
+		return true, nil
+	}
+	for _, shortURL := range shortURLList {
+		if _, ok := repo.urls[shortURL]; ok {
+			return false, ErrURLListIsNotUnique
+		}
+	}
+	return true, nil
+}
+
 func (repo *LocalURLRepository) SaveURLToLocalStorage(urlEntity model.URLEntity) error {
 	repo.mu.Lock()
 	defer repo.mu.Unlock()
@@ -142,8 +217,8 @@ func NewWriter(filename string) (*Writer, error) {
 	return &Writer{file: file, writer: bufio.NewWriter(file)}, nil
 }
 
-func (w *Writer) WriteEntity(urlEntity *model.URLEntity) error {
-	data, err := json.Marshal(&urlEntity)
+func (w *Writer) WriteEntity(entity *model.URLEntity) error {
+	data, err := json.Marshal(&entity)
 	if err != nil {
 		return fmt.Errorf("could not marshal entity: %w", err)
 	}
@@ -156,6 +231,30 @@ func (w *Writer) WriteEntity(urlEntity *model.URLEntity) error {
 		return fmt.Errorf("could not write to file: %w", err)
 	}
 	defer w.Close()
+	return w.writer.Flush()
+}
+
+func (w *Writer) BulkWriteEntities(entities []model.URLBulkCreate) error {
+	defer w.Close()
+	for _, entity := range entities {
+		entityForFile := model.URLEntity{
+			OriginalURL: entity.OriginalURL,
+			ShortURL:    entity.ShortURL,
+		}
+		data, err := json.Marshal(&entityForFile)
+		if err != nil {
+			return fmt.Errorf("could not marshal entity: %w", err)
+		}
+
+		if _, err = w.writer.Write(data); err != nil {
+			return fmt.Errorf("could not write to file: %w", err)
+		}
+
+		if err = w.writer.WriteByte('\n'); err != nil {
+			return fmt.Errorf("could not write to file: %w", err)
+		}
+		defer w.Close()
+	}
 	return w.writer.Flush()
 }
 
@@ -238,7 +337,7 @@ func NewURLRepository(app *config.App) (*LocalURLRepository, error) {
 		logger: app.Logger,
 	}
 
-	if repo.db == nil && app.Cfg.DatabaseDsn != "" {
+	if repo.db == nil && app.Cfg.FileStoragePath != "" {
 		err := repo.uploadLocalStorage(app.Cfg.FileStoragePath)
 		if err != nil {
 			repo.logger.Info("could not upload data from the file",

@@ -10,7 +10,7 @@ import (
 
 type Config struct {
 	ServerAddress   string `env:"SERVER_ADDRESS"`
-	ResponseURL     string `env:"BASE_URL"`
+	ResponseDomain  string `env:"BASE_URL"`
 	DebugLevel      string `env:"DEBUG_LEVEL"`
 	FileStoragePath string `env:"FILE_STORAGE_PATH"`
 	DatabaseDsn     string `env:"DATABASE_DSN"`
@@ -21,7 +21,7 @@ func ParseFlags() (*Config, error) {
 	conf := Config{}
 
 	fs.StringVar(&conf.ServerAddress, "a", "localhost:8080", "server address")
-	fs.StringVar(&conf.ResponseURL, "b", "http://localhost:8080", "response URL")
+	fs.StringVar(&conf.ResponseDomain, "b", "http://localhost:8080", "response URL")
 	fs.StringVar(&conf.FileStoragePath, "f", "", "file storage path")
 	fs.StringVar(&conf.DebugLevel, "debug", "Info", "debug level")
 	fs.StringVar(&conf.DatabaseDsn, "d", "", "database dsn")
@@ -38,7 +38,7 @@ func ParseFlags() (*Config, error) {
 
 	envBaseURL, ok := os.LookupEnv("BASE_URL")
 	if ok {
-		conf.ResponseURL = envBaseURL
+		conf.ResponseDomain = envBaseURL
 	}
 
 	envDebugLevel, ok := os.LookupEnv("DEBUG_LEVEL")
