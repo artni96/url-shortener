@@ -224,7 +224,6 @@ func TestCreateURLHandler(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				fmt.Println(string(strBody))
 				assert.Regexpf(t, tt.want.message, string(strBody), "expected message didn't match")
 			}
 
@@ -422,7 +421,6 @@ func TestBulkCreateURLHandler(t *testing.T) {
 			reqBody := strings.NewReader(tt.request.body)
 
 			req := httptest.NewRequest(tt.request.method, "/", reqBody)
-			fmt.Println(tt.request.method)
 			w := httptest.NewRecorder()
 			h.BulkCreateURLHandler(w, req)
 			res := w.Result()
@@ -435,6 +433,81 @@ func TestBulkCreateURLHandler(t *testing.T) {
 				t.Fatal(err)
 			}
 			assert.Regexpf(t, tt.want.message, string(strBody), "expected message didn't match")
+		})
+	}
+}
+
+func TestGetListHandler(t *testing.T) {
+	tempDir := t.TempDir()
+	testFile := filepath.Join(tempDir, "data.json")
+	testLogger := zap.NewNop()
+
+	ctx := context.Background()
+	cfg := config.Config{
+		ServerAddress:   "localhost:8080",
+		ResponseDomain:  "http://localhost:8080",
+		FileStoragePath: testFile,
+	}
+
+	app := config.App{
+		DB:     nil,
+		Cfg:    &cfg,
+		Logger: testLogger,
+	}
+
+	testDB, err := db.InitDBConnection(ctx, &app)
+	if err == nil {
+		app.DB = testDB
+	}
+
+	urlRepo, err := repository.NewURLRepository(&app)
+	if err != nil {
+		t.Fatal(err)
+	}
+	urlService := service.NewURLService(urlRepo, &app)
+	h := NewURLHandler(&ctx, &app, urlService)
+
+	type want struct {
+		status      int
+		contentType string
+		message     string
+	}
+	type request struct {
+		method string
+	}
+	tests := []struct {
+		name    string
+		request request
+		want    want
+	}{
+		{
+			name: "success",
+			request: request{
+				method: http.MethodGet,
+			},
+			want: want{
+				status:      http.StatusOK,
+				contentType: "application/json",
+				message:     "null\n",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+
+			req := httptest.NewRequest(tt.request.method, "/", nil)
+			fmt.Println(tt.request.method)
+			w := httptest.NewRecorder()
+			h.GetListHandler(w, req)
+			res := w.Result()
+			defer res.Body.Close()
+			assert.Equal(t, tt.want.status, res.StatusCode)
+			assert.Equal(t, tt.want.contentType, res.Header.Get("Content-Type"))
+			resBody, err := io.ReadAll(res.Body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			assert.Equal(t, tt.want.message, string(resBody))
 		})
 	}
 }

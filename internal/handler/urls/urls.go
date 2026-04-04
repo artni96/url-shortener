@@ -193,17 +193,18 @@ func (h *URLHandler) GetURLHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *URLHandler) GetListHandler(w http.ResponseWriter, r *http.Request) {
-	urlList, err := h.urlService.GetList(*h.ctx)
+	urlList, err := h.urlService.GetList(*h.ctx, h.responseDomain)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("Could not get the list of urls"))
 	}
-	w.WriteHeader(http.StatusOK)
 	w.Header().Set("Content-Type", "application/json")
 	if err = json.NewEncoder(w).Encode(urlList); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+	w.WriteHeader(http.StatusOK)
+
 }
 
 func URLRouter(ctx *context.Context, app *config.App, urlService service.URLServiceInterface) chi.Router {

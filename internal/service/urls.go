@@ -15,7 +15,7 @@ import (
 var ErrFailedToCreated = errors.New("could not create ShortURL")
 
 type URLServiceInterface interface {
-	GetList(ctx context.Context) ([]model.URLEntity, error)
+	GetList(ctx context.Context, responseDomain string) ([]model.URLEntity, error)
 	GetByShortURL(ctx context.Context, urlID string) (string, error)
 	Create(ctx context.Context, urlStr string, responseDomain string) (string, error)
 	BulkCreate(ctx context.Context, urls []model.URLBulkCreateRequest, responseDomain string) ([]model.URLBulkCreateResponse, error)
@@ -26,11 +26,16 @@ type URLService struct {
 	app  *config.App
 }
 
-func (s *URLService) GetList(ctx context.Context) ([]model.URLEntity, error) {
+func (s *URLService) GetList(ctx context.Context, responseDomain string) ([]model.URLEntity, error) {
 	result, err := s.repo.GetList(ctx)
 	if err != nil {
 		return nil, err
 	}
+
+	for i := range result {
+		result[i].ShortURL = fmt.Sprintf("%s/%s", responseDomain, result[i].ShortURL)
+	}
+
 	return result, nil
 }
 
@@ -142,7 +147,7 @@ func (s *URLService) BulkCreate(ctx context.Context, urls []model.URLBulkCreateR
 	for _, entity := range entities {
 		response = append(response, model.URLBulkCreateResponse{
 			CorrelationID: entity.CorrelationID,
-			ShortURL:      responseDomain + "/" + entity.ShortURL,
+			ShortURL:      fmt.Sprintf("%s/%s", responseDomain, entity.ShortURL),
 		})
 	}
 
