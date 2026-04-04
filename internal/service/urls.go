@@ -66,7 +66,7 @@ func (s *URLService) Create(ctx context.Context, originalURL string, responseDom
 					zap.String("originalURL", originalURL),
 				)
 
-				return "", err
+				return fmt.Sprintf("%s/%s", responseDomain, entity.ShortURL), err
 			}
 			if errors.Is(err, repository.ErrShortURLAlreadyExists) {
 				s.app.Logger.Info(
@@ -100,7 +100,7 @@ func (s *URLService) Create(ctx context.Context, originalURL string, responseDom
 			}
 		}
 
-		return responseDomain + "/" + entity.ShortURL, nil
+		return fmt.Sprintf("%s/%s", responseDomain, entity.ShortURL), nil
 	}
 	return "", fmt.Errorf("%w %s", ErrFailedToCreated, originalURL)
 }

@@ -67,15 +67,24 @@ func (h *URLHandler) ShortenURLHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	shortURL, err := h.urlService.Create(*h.ctx, body.URL, h.responseDomain)
+	responseData.Result = shortURL
+	w.Header().Set("Content-Type", "application/json")
+
 	if err != nil {
 		if errors.Is(err, service.ErrFailedToCreated) {
 			errMessage := err.Error()
 			ErrorResponse(w, errMessage, http.StatusInternalServerError, h.logger)
 			return
 		} else if errors.Is(err, repository.ErrOriginalURLAlreadyExists) {
-			w.Header().Set("Content-Type", "application/json")
+
 			w.WriteHeader(http.StatusConflict)
-			w.Write([]byte(`{"error": "OriginalURL already exists."}`))
+			resp, err := json.Marshal(responseData)
+			if err != nil {
+				errMessage := fmt.Sprintf("Could not create short URL for %s", body.URL)
+				ErrorResponse(w, errMessage, http.StatusInternalServerError, h.logger)
+				return
+			}
+			w.Write(resp)
 			return
 		} else {
 			errMessage := fmt.Sprintf("Could not create short URL for %s", body.URL)
@@ -83,9 +92,7 @@ func (h *URLHandler) ShortenURLHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	responseData.Result = shortURL
-	//responseData.Result = fmt.Sprintf("%s/%s", h.responseURL, shortURL)
-	w.Header().Set("Content-Type", "application/json")
+
 	w.WriteHeader(http.StatusCreated)
 	resp, err := json.Marshal(responseData)
 	if err != nil {
@@ -172,12 +179,11 @@ func (h *URLHandler) CreateURLHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, repository.ErrOriginalURLAlreadyExists) {
 			w.WriteHeader(http.StatusConflict)
-			w.Write([]byte("OriginalURL already exists"))
+			w.Write([]byte(shortURL))
 			return
 		}
 
 		if errors.Is(err, service.ErrFailedToCreated) {
-			//w.Header().Set("Content-Type", "text/plain")
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(err.Error()))
 		} else {
@@ -186,7 +192,6 @@ func (h *URLHandler) CreateURLHandler(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte("Could not handle the request"))
 		}
 	}
-	//w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusCreated)
 	w.Write([]byte(shortURL))
 

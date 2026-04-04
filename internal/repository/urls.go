@@ -72,7 +72,11 @@ func (repo *LocalURLRepository) Create(ctx context.Context, originalURL, shortUR
 		result, err := repo.db.ExecContext(ctx, insertQuery, originalURL, shortURL)
 		if err != nil {
 			if errors.As(err, &testErr) {
-				return model.URLEntity{}, fmt.Errorf("%w: %s", ErrOriginalURLAlreadyExists, originalURL)
+
+				selectQuery = "SELECT original_url, short_url FROM urls WHERE original_url = $1"
+				repo.db.GetContext(ctx, &entity, selectQuery, originalURL)
+
+				return entity, fmt.Errorf("%w: %s", ErrOriginalURLAlreadyExists, originalURL)
 			}
 		}
 		if result == nil {
