@@ -22,7 +22,6 @@ type URLServiceInterface interface {
 }
 type URLService struct {
 	repo repository.URLRepositoryInterface
-	log  *zap.Logger
 	app  *config.App
 }
 
@@ -52,22 +51,31 @@ func (s *URLService) Create(ctx context.Context, originalURL string, responseDom
 	for i := range 5 {
 		shortURL, err := utility.GenerateShortURL(10)
 		if err != nil {
-			s.log.Info(
+			s.app.Logger.Info(
 				"urlID creation",
 				zap.Int("attempt №", i),
 			)
 			continue
 		}
 		entity, err := s.repo.Create(ctx, originalURL, shortURL)
+
 		if err != nil {
-			if errors.Is(err, repository.ErrURLAlreadyExists) {
-				s.log.Info(
+			if errors.Is(err, repository.ErrOriginalURLAlreadyExists) {
+
+				s.app.Logger.Info("original url already exists",
+					zap.String("originalURL", originalURL),
+				)
+
+				return "", err
+			}
+			if errors.Is(err, repository.ErrShortURLAlreadyExists) {
+				s.app.Logger.Info(
 					"shortURL creation",
 					zap.Int("attempt №", i),
 				)
 				continue
 			} else {
-				s.log.Error(
+				s.app.Logger.Error(
 					"could not manage to create a short url for ",
 					zap.String("url", originalURL),
 				)
@@ -78,7 +86,7 @@ func (s *URLService) Create(ctx context.Context, originalURL string, responseDom
 		if s.app.Cfg.FileStoragePath != "" {
 			fileWriter, err := repository.NewWriter(s.app.Cfg.FileStoragePath)
 			if err != nil {
-				s.log.Error("could not create file writer",
+				s.app.Logger.Error("could not create file writer",
 					zap.String("path", s.app.Cfg.FileStoragePath),
 					zap.String("error message", err.Error()),
 				)
@@ -130,7 +138,7 @@ func (s *URLService) BulkCreate(ctx context.Context, urls []model.URLBulkCreateR
 	if s.app.Cfg.FileStoragePath != "" {
 		fileWriter, err := repository.NewWriter(s.app.Cfg.FileStoragePath)
 		if err != nil {
-			s.log.Error("could not create file writer",
+			s.app.Logger.Error("could not create file writer",
 				zap.String("path", s.app.Cfg.FileStoragePath),
 				zap.String("error message", err.Error()),
 			)

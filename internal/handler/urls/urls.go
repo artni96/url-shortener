@@ -14,6 +14,7 @@ import (
 	"github.com/artni96/url-shortener/internal/config"
 	"github.com/artni96/url-shortener/internal/logger"
 	"github.com/artni96/url-shortener/internal/model"
+	"github.com/artni96/url-shortener/internal/repository"
 	"github.com/artni96/url-shortener/internal/service"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -70,6 +71,11 @@ func (h *URLHandler) ShortenURLHandler(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, service.ErrFailedToCreated) {
 			errMessage := err.Error()
 			ErrorResponse(w, errMessage, http.StatusInternalServerError, h.logger)
+			return
+		} else if errors.Is(err, repository.ErrOriginalURLAlreadyExists) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusConflict)
+			w.Write([]byte(`{"error": "OriginalURL already exists."}`))
 			return
 		} else {
 			errMessage := fmt.Sprintf("Could not create short URL for %s", body.URL)
@@ -162,18 +168,25 @@ func (h *URLHandler) CreateURLHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	shortURL, err := h.urlService.Create(*h.ctx, urlStr, h.responseDomain)
+	w.Header().Set("Content-Type", "text/plain")
 	if err != nil {
+		if errors.Is(err, repository.ErrOriginalURLAlreadyExists) {
+			w.WriteHeader(http.StatusConflict)
+			w.Write([]byte("OriginalURL already exists"))
+			return
+		}
+
 		if errors.Is(err, service.ErrFailedToCreated) {
-			w.Header().Set("Content-Type", "text/plain")
+			//w.Header().Set("Content-Type", "text/plain")
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(err.Error()))
 		} else {
-			w.Header().Set("Content-Type", "text/plain")
+
 			w.WriteHeader(http.StatusBadRequest)
 			w.Write([]byte("Could not handle the request"))
 		}
 	}
-	w.Header().Set("Content-Type", "text/plain")
+	//w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusCreated)
 	w.Write([]byte(shortURL))
 
@@ -199,11 +212,18 @@ func (h *URLHandler) GetListHandler(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("Could not get the list of urls"))
 	}
 	w.Header().Set("Content-Type", "application/json")
-	if err = json.NewEncoder(w).Encode(urlList); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+	//if err = json.NewEncoder(w).Encode(urlList); err != nil {
+	//	w.WriteHeader(http.StatusBadRequest)
+	//	return
+	//}
+	w.WriteHeader(http.StatusOK)
+	resp, err := json.Marshal(urlList)
+	if err != nil {
+		errMessage := "could not marshal request body"
+		ErrorResponse(w, errMessage, http.StatusInternalServerError, h.logger)
 		return
 	}
-	w.WriteHeader(http.StatusOK)
+	w.Write(resp)
 
 }
 

@@ -11,11 +11,13 @@ import (
 
 	"github.com/artni96/url-shortener/internal/config"
 	"github.com/artni96/url-shortener/internal/model"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jmoiron/sqlx"
 	"go.uber.org/zap"
 )
 
-var ErrURLAlreadyExists = errors.New("url already exists")
+var ErrShortURLAlreadyExists = errors.New("short url already exists")
+var ErrOriginalURLAlreadyExists = errors.New("url already exists")
 var ErrURLNotFound = errors.New("url not found")
 var ErrURLNotCreated = errors.New("could not create url")
 var ErrURLListIsNotUnique = errors.New("url list is not unique")
@@ -28,6 +30,19 @@ type URLRepositoryInterface interface {
 	SaveURLToLocalStorage(url model.URLEntity) error
 	IsURLListUnique(ctx context.Context, shortURLList []string) (bool, error)
 }
+
+//type UniqueConstraintError struct {
+//	error string
+//}
+//
+//func (e *UniqueConstraintError) Error() string {
+//	return e.error
+//}
+//
+//func NewUniqueConstraintError(err error) error {
+//	return &UniqueConstraintError{}
+//}
+
 type LocalURLRepository struct {
 	mu     sync.RWMutex
 	urls   map[string]string
@@ -49,12 +64,17 @@ func (repo *LocalURLRepository) Create(ctx context.Context, originalURL, shortUR
 		}
 
 		if entity.ShortURL != "" && entity.ShortURL != shortURL {
-			return model.URLEntity{}, fmt.Errorf("%w: short url already exists", ErrURLAlreadyExists)
+			return model.URLEntity{}, fmt.Errorf("%w: short url already exists", ErrShortURLAlreadyExists)
 		}
+		var testErr *pgconn.PgError
+		insertQuery := "INSERT INTO urls (short_url, original_url) VALUES ($1, $2) ON CONFLICT (original_url)"
 
-		insertQuery := "INSERT INTO urls (short_url, original_url) VALUES ($1, $2)"
-
-		result := repo.db.MustExecContext(ctx, insertQuery, shortURL, originalURL)
+		result, err := repo.db.ExecContext(ctx, insertQuery, shortURL, originalURL)
+		if err != nil {
+			if errors.As(err, &testErr) {
+				return model.URLEntity{}, fmt.Errorf("%w: %s", ErrOriginalURLAlreadyExists, originalURL)
+			}
+		}
 		if result == nil {
 			return model.URLEntity{}, ErrURLNotCreated
 		}
@@ -64,7 +84,14 @@ func (repo *LocalURLRepository) Create(ctx context.Context, originalURL, shortUR
 		return entity, nil
 	}
 	if _, ok := repo.urls[originalURL]; ok {
-		return model.URLEntity{}, ErrURLAlreadyExists
+		return model.URLEntity{}, ErrShortURLAlreadyExists
+	}
+
+	for _, entity := range repo.urls {
+		if entity == originalURL {
+			return model.URLEntity{}, ErrOriginalURLAlreadyExists
+		}
+
 	}
 
 	repo.urls[shortURL] = originalURL
@@ -198,7 +225,7 @@ func (repo *LocalURLRepository) SaveURLToLocalStorage(urlEntity model.URLEntity)
 
 	_, ok := repo.urls[urlEntity.ShortURL]
 	if ok {
-		return fmt.Errorf("%w: %s", ErrURLAlreadyExists, urlEntity.ShortURL)
+		return fmt.Errorf("%w: %s", ErrShortURLAlreadyExists, urlEntity.ShortURL)
 	}
 	repo.urls[urlEntity.ShortURL] = urlEntity.OriginalURL
 	return nil
@@ -345,9 +372,10 @@ func NewURLRepository(app *config.App) (*LocalURLRepository, error) {
 				zap.String("error", err.Error()))
 			return nil, err
 		}
-		repo.logger.Info("filepath for file storage is not set, keep working with in memory storage")
+		repo.logger.Info("successfully uploaded data from the file")
+
 		return &repo, nil
 	}
-	repo.logger.Info("successfully uploaded data from the file")
+	repo.logger.Info("filepath for file storage is not set, keep working with in memory storage")
 	return &repo, nil
 }
