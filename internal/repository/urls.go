@@ -67,9 +67,9 @@ func (repo *LocalURLRepository) Create(ctx context.Context, originalURL, shortUR
 			return model.URLEntity{}, fmt.Errorf("%w: short url already exists", ErrShortURLAlreadyExists)
 		}
 		var testErr *pgconn.PgError
-		insertQuery := "INSERT INTO urls (short_url, original_url) VALUES ($1, $2) ON CONFLICT (original_url)"
+		insertQuery := "INSERT INTO urls (original_url, short_url) VALUES ($1, $2)"
 
-		result, err := repo.db.ExecContext(ctx, insertQuery, shortURL, originalURL)
+		result, err := repo.db.ExecContext(ctx, insertQuery, originalURL, shortURL)
 		if err != nil {
 			if errors.As(err, &testErr) {
 				return model.URLEntity{}, fmt.Errorf("%w: %s", ErrOriginalURLAlreadyExists, originalURL)
@@ -375,7 +375,8 @@ func NewURLRepository(app *config.App) (*LocalURLRepository, error) {
 		repo.logger.Info("successfully uploaded data from the file")
 
 		return &repo, nil
+	} else if repo.db == nil && app.Cfg.FileStoragePath == "" {
+		repo.logger.Info("filepath for file storage is not set, keep working with in memory storage")
 	}
-	repo.logger.Info("filepath for file storage is not set, keep working with in memory storage")
 	return &repo, nil
 }
