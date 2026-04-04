@@ -27,21 +27,11 @@ type URLRepositoryInterface interface {
 	GetByShortURL(ctx context.Context, shortURL string) (string, error)
 	Create(ctx context.Context, originalURL, shortURL string) (model.URLEntity, error)
 	BulkCreate(ctx context.Context, urls []model.URLBulkCreate) ([]model.URLBulkCreate, error)
+	Delete(ctx context.Context, shortURL string) error
+
 	SaveURLToLocalStorage(url model.URLEntity) error
 	IsURLListUnique(ctx context.Context, shortURLList []string) (bool, error)
 }
-
-//type UniqueConstraintError struct {
-//	error string
-//}
-//
-//func (e *UniqueConstraintError) Error() string {
-//	return e.error
-//}
-//
-//func NewUniqueConstraintError(err error) error {
-//	return &UniqueConstraintError{}
-//}
 
 type LocalURLRepository struct {
 	mu     sync.RWMutex
@@ -66,12 +56,12 @@ func (repo *LocalURLRepository) Create(ctx context.Context, originalURL, shortUR
 		if entity.ShortURL != "" && entity.ShortURL != shortURL {
 			return model.URLEntity{}, fmt.Errorf("%w: short url already exists", ErrShortURLAlreadyExists)
 		}
-		var testErr *pgconn.PgError
+		var uniqueConstrErr *pgconn.PgError
 		insertQuery := "INSERT INTO urls (original_url, short_url) VALUES ($1, $2)"
 
 		result, err := repo.db.ExecContext(ctx, insertQuery, originalURL, shortURL)
 		if err != nil {
-			if errors.As(err, &testErr) {
+			if errors.As(err, &uniqueConstrErr) {
 
 				selectQuery = "SELECT original_url, short_url FROM urls WHERE original_url = $1"
 				repo.db.GetContext(ctx, &entity, selectQuery, originalURL)
@@ -87,15 +77,15 @@ func (repo *LocalURLRepository) Create(ctx context.Context, originalURL, shortUR
 		entity.ShortURL = shortURL
 		return entity, nil
 	}
+
 	if _, ok := repo.urls[originalURL]; ok {
 		return model.URLEntity{}, ErrShortURLAlreadyExists
 	}
 
-	for _, entity := range repo.urls {
-		if entity == originalURL {
+	for _, url := range repo.urls {
+		if url == originalURL {
 			return model.URLEntity{}, ErrOriginalURLAlreadyExists
 		}
-
 	}
 
 	repo.urls[shortURL] = originalURL
@@ -197,6 +187,36 @@ func (repo *LocalURLRepository) BulkCreate(ctx context.Context, urls []model.URL
 	}
 
 	return result, nil
+}
+
+func (repo *LocalURLRepository) Delete(ctx context.Context, shortURL string) error {
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
+
+	if repo.db != nil {
+
+		query := "DELETE FROM urls WHERE original_url = $1 RETURNING short_url"
+		stmt, err := repo.db.PrepareContext(ctx, query)
+		if err != nil {
+			return fmt.Errorf("%w", err)
+		}
+		resp, err := stmt.ExecContext(ctx, shortURL)
+		if resp != nil {
+			return fmt.Errorf("%w", ErrURLNotFound)
+		}
+		if err != nil {
+			return fmt.Errorf("%w", err)
+		}
+		return nil
+	}
+
+	for url := range repo.urls {
+		if url == shortURL {
+			delete(repo.urls, shortURL)
+			return nil
+		}
+	}
+	return fmt.Errorf("%w", ErrURLNotFound)
 }
 
 func (repo *LocalURLRepository) IsURLListUnique(ctx context.Context, shortURLList []string) (bool, error) {

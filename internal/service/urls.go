@@ -19,6 +19,7 @@ type URLServiceInterface interface {
 	GetByShortURL(ctx context.Context, urlID string) (string, error)
 	Create(ctx context.Context, urlStr string, responseDomain string) (string, error)
 	BulkCreate(ctx context.Context, urls []model.URLBulkCreateRequest, responseDomain string) ([]model.URLBulkCreateResponse, error)
+	Delete(ctx context.Context, urlID string) error
 }
 type URLService struct {
 	repo repository.URLRepositoryInterface
@@ -28,7 +29,7 @@ type URLService struct {
 func (s *URLService) GetList(ctx context.Context, responseDomain string) ([]model.URLEntity, error) {
 	result, err := s.repo.GetList(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w", err)
 	}
 
 	for i := range result {
@@ -41,7 +42,7 @@ func (s *URLService) GetList(ctx context.Context, responseDomain string) ([]mode
 func (s *URLService) GetByShortURL(ctx context.Context, shortURL string) (string, error) {
 	originalURL, err := s.repo.GetByShortURL(ctx, shortURL)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("%w", err)
 	}
 	return originalURL, nil
 }
@@ -79,7 +80,7 @@ func (s *URLService) Create(ctx context.Context, originalURL string, responseDom
 					"could not manage to create a short url for ",
 					zap.String("url", originalURL),
 				)
-				return "", err
+				return "", fmt.Errorf("%w", err)
 			}
 		}
 
@@ -96,7 +97,7 @@ func (s *URLService) Create(ctx context.Context, originalURL string, responseDom
 
 			err = fileWriter.WriteEntity(&entity)
 			if err != nil {
-				return "", err
+				return "", fmt.Errorf("%w", err)
 			}
 		}
 
@@ -132,7 +133,7 @@ func (s *URLService) BulkCreate(ctx context.Context, urls []model.URLBulkCreateR
 
 	entities, err := s.repo.BulkCreate(ctx, toCreateList)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w", err)
 	}
 
 	if s.app.Cfg.FileStoragePath != "" {
@@ -142,12 +143,12 @@ func (s *URLService) BulkCreate(ctx context.Context, urls []model.URLBulkCreateR
 				zap.String("path", s.app.Cfg.FileStoragePath),
 				zap.String("error message", err.Error()),
 			)
-			return []model.URLBulkCreateResponse{}, err
+			return []model.URLBulkCreateResponse{}, fmt.Errorf("%w", err)
 		}
 		defer fileWriter.Close()
 		err = fileWriter.BulkWriteEntities(entities)
 		if err != nil {
-			return []model.URLBulkCreateResponse{}, err
+			return []model.URLBulkCreateResponse{}, fmt.Errorf("%w", err)
 		}
 	}
 
@@ -160,6 +161,14 @@ func (s *URLService) BulkCreate(ctx context.Context, urls []model.URLBulkCreateR
 	}
 
 	return response, nil
+}
+
+func (s *URLService) Delete(ctx context.Context, shortURL string) error {
+	err := s.repo.Delete(ctx, shortURL)
+	if err != nil {
+		return fmt.Errorf("%w", err)
+	}
+	return nil
 }
 
 func NewURLService(repo repository.URLRepositoryInterface, app *config.App) *URLService {

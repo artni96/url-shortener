@@ -25,7 +25,7 @@ const urlPattern = `^https?:\/\/`
 
 type URLHandler struct {
 	responseDomain string
-	urlService     service.URLServiceInterface
+	service        service.URLServiceInterface
 	logger         *zap.Logger
 	ctx            *context.Context
 }
@@ -33,7 +33,7 @@ type URLHandler struct {
 func NewURLHandler(ctx *context.Context, app *config.App, urlService service.URLServiceInterface) *URLHandler {
 	return &URLHandler{
 		responseDomain: app.Cfg.ResponseDomain,
-		urlService:     urlService,
+		service:        urlService,
 		logger:         app.Logger,
 		ctx:            ctx,
 	}
@@ -66,7 +66,7 @@ func (h *URLHandler) ShortenURLHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	shortURL, err := h.urlService.Create(*h.ctx, body.URL, h.responseDomain)
+	shortURL, err := h.service.Create(*h.ctx, body.URL, h.responseDomain)
 	responseData.Result = shortURL
 	w.Header().Set("Content-Type", "application/json")
 
@@ -132,7 +132,7 @@ func (h *URLHandler) BulkCreateURLHandler(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	responseData, err := h.urlService.BulkCreate(*h.ctx, body, h.responseDomain)
+	responseData, err := h.service.BulkCreate(*h.ctx, body, h.responseDomain)
 	if err != nil {
 		errorMessage := "could not bulk create short URL"
 		ErrorResponse(w, errorMessage, http.StatusInternalServerError, h.logger)
@@ -174,7 +174,7 @@ func (h *URLHandler) CreateURLHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	shortURL, err := h.urlService.Create(*h.ctx, urlStr, h.responseDomain)
+	shortURL, err := h.service.Create(*h.ctx, urlStr, h.responseDomain)
 	w.Header().Set("Content-Type", "text/plain")
 	if err != nil {
 		if errors.Is(err, repository.ErrOriginalURLAlreadyExists) {
@@ -199,7 +199,7 @@ func (h *URLHandler) CreateURLHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *URLHandler) GetURLHandler(w http.ResponseWriter, r *http.Request) {
-	redirectTo, err := h.urlService.GetByShortURL(*h.ctx, strings.TrimPrefix(r.URL.Path, "/"))
+	redirectTo, err := h.service.GetByShortURL(*h.ctx, strings.TrimPrefix(r.URL.Path, "/"))
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("URL not found"))
@@ -211,16 +211,12 @@ func (h *URLHandler) GetURLHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *URLHandler) GetListHandler(w http.ResponseWriter, r *http.Request) {
-	urlList, err := h.urlService.GetList(*h.ctx, h.responseDomain)
+	urlList, err := h.service.GetList(*h.ctx, h.responseDomain)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("Could not get the list of urls"))
 	}
 	w.Header().Set("Content-Type", "application/json")
-	//if err = json.NewEncoder(w).Encode(urlList); err != nil {
-	//	w.WriteHeader(http.StatusBadRequest)
-	//	return
-	//}
 	w.WriteHeader(http.StatusOK)
 	resp, err := json.Marshal(urlList)
 	if err != nil {
@@ -229,7 +225,24 @@ func (h *URLHandler) GetListHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Write(resp)
+}
 
+func (h *URLHandler) DeleteURLHandler(w http.ResponseWriter, r *http.Request) {
+	shortURL := strings.TrimPrefix(r.URL.Path, "/")
+	err := h.service.Delete(*h.ctx, shortURL)
+	w.Header().Set("Content-Type", "application/json")
+
+	if err != nil {
+		if errors.Is(err, repository.ErrURLNotFound) {
+			errMessage := fmt.Sprintf("url with short url '%s' not found", shortURL)
+			ErrorResponse(w, errMessage, http.StatusBadRequest, h.logger)
+			return
+		}
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("Could not delete the short URL"))
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func URLRouter(ctx *context.Context, app *config.App, urlService service.URLServiceInterface) chi.Router {
@@ -252,6 +265,7 @@ func URLRouter(ctx *context.Context, app *config.App, urlService service.URLServ
 		r.Get("/", urlHandler.GetListHandler)
 		r.Post("/", urlHandler.CreateURLHandler)
 		r.Get("/{id}", urlHandler.GetURLHandler)
+		r.Delete("/{id}", urlHandler.DeleteURLHandler)
 
 	})
 	return r

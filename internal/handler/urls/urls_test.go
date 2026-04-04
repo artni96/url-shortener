@@ -20,7 +20,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func TestShortenURL(t *testing.T) {
+func testHandler(t *testing.T) *URLHandler {
 	tempDir := t.TempDir()
 	testFile := filepath.Join(tempDir, "data.json")
 	testLogger := zap.NewNop()
@@ -50,6 +50,11 @@ func TestShortenURL(t *testing.T) {
 	}
 	urlService := service.NewURLService(urlRepo, &app)
 	h := NewURLHandler(&ctx, &app, urlService)
+	return h
+}
+
+func TestShortenURL(t *testing.T) {
+	h := testHandler(t)
 
 	type want struct {
 		contentType string
@@ -101,11 +106,22 @@ func TestShortenURL(t *testing.T) {
 				message:     `{"error":"could not unmarshal request body"}`,
 			},
 		},
+		{
+			name: "check unique urls",
+			request: request{
+				body:   `{"url":"https://google.com"}`,
+				method: http.MethodPost,
+			},
+			want: want{
+				contentType: "application/json",
+				status:      http.StatusConflict,
+				message:     `\{\"result\":\"https?://[^\"]+\"\}`,
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			reqBody := strings.NewReader(tt.request.body)
-
 			req := httptest.NewRequest(tt.request.method, "/api/shorten", reqBody)
 			w := httptest.NewRecorder()
 			h.ShortenURLHandler(w, req)
@@ -129,35 +145,7 @@ func TestShortenURL(t *testing.T) {
 }
 
 func TestCreateURLHandler(t *testing.T) {
-	tempDir := t.TempDir()
-	testFile := filepath.Join(tempDir, "data.json")
-	testLogger := zap.NewNop()
-
-	ctx := context.Background()
-
-	cfg := config.Config{
-		ServerAddress:   "localhost:8080",
-		ResponseDomain:  "http://localhost:8080",
-		FileStoragePath: testFile,
-	}
-
-	app := config.App{
-		DB:     nil,
-		Cfg:    &cfg,
-		Logger: testLogger,
-	}
-
-	testDB, err := db.InitDBConnection(ctx, &app)
-	if err == nil {
-		app.DB = testDB
-	}
-
-	urlRepo, err := repository.NewURLRepository(&app)
-	if err != nil {
-		t.Fatal(err)
-	}
-	urlService := service.NewURLService(urlRepo, &app)
-	h := NewURLHandler(&ctx, &app, urlService)
+	h := testHandler(t)
 
 	type want struct {
 		status      int
@@ -207,6 +195,18 @@ func TestCreateURLHandler(t *testing.T) {
 				body:   []byte("practicum.yandex.ru/"),
 			},
 		},
+		{
+			name: "check unique urls",
+			want: want{
+				status:      http.StatusConflict,
+				contentType: "text/plain",
+				message:     `https?://[^\"]+`,
+			},
+			request: request{
+				method: http.MethodPost,
+				body:   []byte("https://practicum.yandex.ru/"),
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -233,35 +233,7 @@ func TestCreateURLHandler(t *testing.T) {
 }
 
 func TestGetURLHandler(t *testing.T) {
-	tempDir := t.TempDir()
-	testFile := filepath.Join(tempDir, "data.json")
-	testLogger := zap.NewNop()
-
-	ctx := context.Background()
-
-	cfg := config.Config{
-		ServerAddress:   "localhost:8080",
-		ResponseDomain:  "http://localhost:8080",
-		FileStoragePath: testFile,
-	}
-
-	app := config.App{
-		DB:     nil,
-		Cfg:    &cfg,
-		Logger: testLogger,
-	}
-
-	testDB, err := db.InitDBConnection(ctx, &app)
-	if err == nil {
-		app.DB = testDB
-	}
-
-	urlRepo, err := repository.NewURLRepository(&app)
-	if err != nil {
-		t.Fatal(err)
-	}
-	urlService := service.NewURLService(urlRepo, &app)
-	h := NewURLHandler(&ctx, &app, urlService)
+	h := testHandler(t)
 
 	type request struct {
 		method string
@@ -330,34 +302,7 @@ func TestGetURLHandler(t *testing.T) {
 }
 
 func TestBulkCreateURLHandler(t *testing.T) {
-	tempDir := t.TempDir()
-	testFile := filepath.Join(tempDir, "data.json")
-	testLogger := zap.NewNop()
-
-	ctx := context.Background()
-	cfg := config.Config{
-		ServerAddress:   "localhost:8080",
-		ResponseDomain:  "http://localhost:8080",
-		FileStoragePath: testFile,
-	}
-
-	app := config.App{
-		DB:     nil,
-		Cfg:    &cfg,
-		Logger: testLogger,
-	}
-
-	testDB, err := db.InitDBConnection(ctx, &app)
-	if err == nil {
-		app.DB = testDB
-	}
-
-	urlRepo, err := repository.NewURLRepository(&app)
-	if err != nil {
-		t.Fatal(err)
-	}
-	urlService := service.NewURLService(urlRepo, &app)
-	h := NewURLHandler(&ctx, &app, urlService)
+	h := testHandler(t)
 
 	type want struct {
 		status      int
@@ -438,34 +383,7 @@ func TestBulkCreateURLHandler(t *testing.T) {
 }
 
 func TestGetListHandler(t *testing.T) {
-	tempDir := t.TempDir()
-	testFile := filepath.Join(tempDir, "data.json")
-	testLogger := zap.NewNop()
-
-	ctx := context.Background()
-	cfg := config.Config{
-		ServerAddress:   "localhost:8080",
-		ResponseDomain:  "http://localhost:8080",
-		FileStoragePath: testFile,
-	}
-
-	app := config.App{
-		DB:     nil,
-		Cfg:    &cfg,
-		Logger: testLogger,
-	}
-
-	testDB, err := db.InitDBConnection(ctx, &app)
-	if err == nil {
-		app.DB = testDB
-	}
-
-	urlRepo, err := repository.NewURLRepository(&app)
-	if err != nil {
-		t.Fatal(err)
-	}
-	urlService := service.NewURLService(urlRepo, &app)
-	h := NewURLHandler(&ctx, &app, urlService)
+	h := testHandler(t)
 
 	type want struct {
 		status      int
@@ -496,7 +414,6 @@ func TestGetListHandler(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 
 			req := httptest.NewRequest(tt.request.method, "/", nil)
-			fmt.Println(tt.request.method)
 			w := httptest.NewRecorder()
 			h.GetListHandler(w, req)
 			res := w.Result()
@@ -508,6 +425,80 @@ func TestGetListHandler(t *testing.T) {
 				t.Fatal(err)
 			}
 			assert.Equal(t, tt.want.message, string(resBody))
+		})
+	}
+}
+
+func TestDeleteURLHandler(t *testing.T) {
+	h := testHandler(t)
+
+	type want struct {
+		status      int
+		contentType string
+		message     string
+	}
+	type request struct {
+		method string
+	}
+	tests := []struct {
+		name    string
+		request request
+		want    want
+	}{
+		{
+			name: "success",
+			request: request{
+				method: http.MethodDelete,
+			},
+			want: want{
+				status:      http.StatusNoContent,
+				contentType: "application/json",
+				message:     "null",
+			},
+		},
+		{
+			name: "url not found",
+			request: request{
+				method: http.MethodDelete,
+			},
+			want: want{
+				status:      http.StatusBadRequest,
+				contentType: "application/json",
+				message:     "null",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			shortURL := "123"
+			if tt.name == "success" {
+				body := []byte("https://practicum.yandex.ru/")
+				reqBody := strings.NewReader(string(body))
+
+				testEntityReq := httptest.NewRequest(http.MethodPost, "/", reqBody)
+				w := httptest.NewRecorder()
+				h.CreateURLHandler(w, testEntityReq)
+
+				testEntityResult := w.Result()
+				assert.Equal(t, http.StatusCreated, testEntityResult.StatusCode)
+				defer testEntityResult.Body.Close()
+				shortURLBody, err := io.ReadAll(testEntityResult.Body)
+
+				prefix := "http://localhost:8080/"
+				shortURL = strings.TrimPrefix(string(shortURLBody), prefix)
+				fmt.Println(shortURL)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			req := httptest.NewRequest(tt.request.method, fmt.Sprintf("/%s", shortURL), nil)
+			w := httptest.NewRecorder()
+			h.DeleteURLHandler(w, req)
+			res := w.Result()
+			defer res.Body.Close()
+			assert.Equal(t, tt.want.status, res.StatusCode)
+
 		})
 	}
 }
