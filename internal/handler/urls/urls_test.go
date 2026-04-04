@@ -287,7 +287,7 @@ func TestGetURLHandler(t *testing.T) {
 			want: want{
 				status:      http.StatusTemporaryRedirect,
 				contentType: "text/plain",
-				redirectTo:  "http://test.com",
+				redirectTo:  "http://test1.com",
 			},
 		},
 		{
@@ -299,7 +299,7 @@ func TestGetURLHandler(t *testing.T) {
 			want: want{
 				status:      http.StatusBadRequest,
 				contentType: "text/plain",
-				redirectTo:  "http://test.com",
+				redirectTo:  "http://test2.com",
 			},
 		},
 	}
@@ -488,7 +488,7 @@ func TestGetListHandler(t *testing.T) {
 			want: want{
 				status:      http.StatusOK,
 				contentType: "application/json",
-				message:     "null\n",
+				message:     "null",
 			},
 		},
 	}
