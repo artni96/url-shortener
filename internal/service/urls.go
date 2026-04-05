@@ -19,6 +19,7 @@ type URLServiceInterface interface {
 	GetByShortURL(ctx context.Context, urlID string) (string, error)
 	Create(ctx context.Context, urlStr string, responseDomain string) (string, error)
 	BulkCreate(ctx context.Context, urls []model.URLBulkCreateRequest, responseDomain string) ([]model.URLBulkCreateResponse, error)
+	Update(ctx context.Context, entity model.URLEntity, responseDomain string) (string, error)
 	Delete(ctx context.Context, urlID string) error
 }
 type URLService struct {
@@ -170,6 +171,31 @@ func (s *URLService) BulkCreate(ctx context.Context, urls []model.URLBulkCreateR
 	}
 
 	return response, nil
+}
+
+func (s *URLService) Update(ctx context.Context, entity model.URLEntity, responseDomain string) (string, error) {
+	updatedEntity, err := s.repo.Update(ctx, entity)
+	if err != nil {
+		return "", fmt.Errorf("%w", err)
+	}
+	if s.app.Cfg.FileStoragePath != "" {
+		entitiesForFile, err := s.repo.GetList(ctx)
+		fileWriter, err := repository.NewWriter(s.app.Cfg.FileStoragePath)
+		if err != nil {
+			s.app.Logger.Error("could not create file writer",
+				zap.String("path", s.app.Cfg.FileStoragePath),
+				zap.String("error message", err.Error()),
+			)
+			return "", fmt.Errorf("%w", err)
+		}
+		defer fileWriter.Close()
+
+		err = fileWriter.BulkWriteEntities(entitiesForFile, true)
+		if err != nil {
+			return "", fmt.Errorf("%w", err)
+		}
+	}
+	return updatedEntity.OriginalURL, nil
 }
 
 func (s *URLService) Delete(ctx context.Context, shortURL string) error {

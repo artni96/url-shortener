@@ -1,7 +1,7 @@
 package model
 
 type URLCreateRequest struct {
-	URL string `json:"url"`
+	OriginalURL string `json:"url"`
 }
 
 type URLCreateResponse struct {

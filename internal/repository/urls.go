@@ -27,6 +27,7 @@ type URLRepositoryInterface interface {
 	GetByShortURL(ctx context.Context, shortURL string) (string, error)
 	Create(ctx context.Context, originalURL, shortURL string) (model.URLEntity, error)
 	BulkCreate(ctx context.Context, urls []model.URLBulkCreate) ([]model.URLBulkCreate, error)
+	Update(ctx context.Context, entity model.URLEntity) (model.URLEntity, error)
 	Delete(ctx context.Context, shortURL string) error
 
 	SaveURLToLocalStorage(url model.URLEntity) error
@@ -200,6 +201,43 @@ func (repo *LocalURLRepository) BulkCreate(ctx context.Context, urls []model.URL
 	}
 
 	return result, nil
+}
+
+func (repo *LocalURLRepository) Update(ctx context.Context, entity model.URLEntity) (model.URLEntity, error) {
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
+
+	updatedEntity := model.URLEntity{}
+	if repo.db != nil {
+		query := "UPDATE urls SET original_url = $1 WHERE short_url = $2 RETURNING original_url"
+		stmt, err := repo.db.PrepareContext(ctx, query)
+		if err != nil {
+			return updatedEntity, fmt.Errorf("%w", err)
+		}
+
+		resp, err := stmt.ExecContext(ctx, entity.ShortURL, entity.OriginalURL)
+		if err != nil {
+			return updatedEntity, fmt.Errorf("%w", err)
+		}
+
+		_, err = resp.RowsAffected()
+		if err != nil {
+			return updatedEntity, fmt.Errorf("%w", ErrURLNotFound)
+		}
+		updatedEntity.OriginalURL = entity.OriginalURL
+		updatedEntity.ShortURL = entity.ShortURL
+		return updatedEntity, nil
+	}
+
+	for dbShortURL := range repo.urls {
+		if dbShortURL == entity.ShortURL {
+			repo.urls[dbShortURL] = entity.OriginalURL
+			updatedEntity.OriginalURL = entity.OriginalURL
+			updatedEntity.ShortURL = entity.ShortURL
+			return updatedEntity, nil
+		}
+	}
+	return updatedEntity, ErrURLNotFound
 }
 
 func (repo *LocalURLRepository) Delete(ctx context.Context, shortURL string) error {
