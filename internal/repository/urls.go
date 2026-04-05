@@ -108,7 +108,7 @@ func (repo *LocalURLRepository) GetByShortURL(ctx context.Context, shortURL stri
 		err := repo.db.GetContext(ctx, &entity, selectQuery, shortURL)
 
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("%w: %s", ErrURLNotFound, shortURL)
 		}
 		return entity, nil
 	}
@@ -131,7 +131,7 @@ func (repo *LocalURLRepository) GetList(ctx context.Context) ([]model.URLEntity,
 		err := repo.db.SelectContext(ctx, &entities, selectQuery)
 
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w", err)
 		}
 		return entities, nil
 	}
@@ -151,14 +151,13 @@ func (repo *LocalURLRepository) BulkCreate(ctx context.Context, urls []model.URL
 	var result []model.URLBulkCreate
 
 	if repo.db != nil {
-
-		query := "INSERT INTO urls (short_url, original_url) VALUES ($1, $2)"
-		stmt, err := repo.db.PrepareContext(ctx, query)
+		tx, err := repo.db.BeginTxx(ctx, nil)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w", err)
 		}
 
-		tx, err := repo.db.BeginTxx(ctx, nil)
+		query := "INSERT INTO urls (short_url, original_url) VALUES ($1, $2)"
+		stmt, err := tx.PrepareContext(ctx, query)
 		if err != nil {
 			return nil, err
 		}
@@ -166,7 +165,7 @@ func (repo *LocalURLRepository) BulkCreate(ctx context.Context, urls []model.URL
 		for _, url := range urls {
 			_, err = stmt.ExecContext(ctx, url.ShortURL, url.OriginalURL)
 			if err != nil {
-				if errors.Is(err, uniqueConstrErr) {
+				if errors.As(err, &uniqueConstrErr) {
 					errs = append(errs, fmt.Errorf("%w: %s", ErrOriginalURLAlreadyExists, url.OriginalURL))
 				}
 				continue
@@ -181,7 +180,10 @@ func (repo *LocalURLRepository) BulkCreate(ctx context.Context, urls []model.URL
 
 		}
 		if len(errs) > 0 {
-			tx.Rollback()
+			err := tx.Rollback()
+			if err != nil {
+				return nil, fmt.Errorf("%w", err)
+			}
 			return nil, errors.Join(errs...)
 		}
 		return result, tx.Commit()
@@ -214,7 +216,7 @@ func (repo *LocalURLRepository) Delete(ctx context.Context, shortURL string) err
 		resp, err := stmt.ExecContext(ctx, shortURL)
 
 		if err != nil {
-			return err
+			return fmt.Errorf("%w", err)
 		}
 
 		isRemoved, err := resp.RowsAffected()
@@ -242,11 +244,11 @@ func (repo *LocalURLRepository) IsURLListUnique(ctx context.Context, shortURLLis
 		query := "SELECT original_url FROM urls WHERE short_url IN ($1)"
 		stmt, err := repo.db.PrepareContext(ctx, query)
 		if err != nil {
-			return false, err
+			return false, fmt.Errorf("%w", err)
 		}
 		result, err := stmt.QueryContext(ctx, shortURLList)
 		if err != nil {
-			return false, err
+			return false, fmt.Errorf("%w", err)
 		}
 		if result != nil {
 			return false, ErrURLListIsNotUnique
@@ -363,7 +365,7 @@ func (s *FileScanner) CollectData() ([]model.URLEntity, error) {
 
 		object := model.URLEntity{}
 		if err := json.Unmarshal(data, &object); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("could not unmarshal object: %w", err)
 		}
 		result = append(result, object)
 	}
@@ -378,7 +380,7 @@ func (s *FileScanner) CollectFilteredData(shortURL string) ([]model.URLBulkCreat
 
 		object := model.URLBulkCreate{}
 		if err := json.Unmarshal(data, &object); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("could not unmarshal object: %w", err)
 		}
 		if object.ShortURL != shortURL {
 			result = append(result, object)
@@ -417,7 +419,7 @@ func (repo *LocalURLRepository) uploadLocalStorage(filepath string) error {
 			repo.logger.Info("could not upload URL Entity to local storage",
 				zap.String("ShortURL", object.ShortURL),
 				zap.String("OriginalURL", object.OriginalURL))
-			return err
+			return fmt.Errorf("could not upload URL Entity to local storage: %w", err)
 		}
 	}
 	return nil
@@ -436,7 +438,7 @@ func NewURLRepository(app *config.App) (*LocalURLRepository, error) {
 			repo.logger.Info("could not upload data from the file",
 				zap.String("filepath", app.Cfg.FileStoragePath),
 				zap.String("error", err.Error()))
-			return nil, err
+			return nil, fmt.Errorf("could not upload data from the file: %w", err)
 		}
 		repo.logger.Info("successfully uploaded data from the file")
 
