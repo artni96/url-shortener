@@ -31,6 +31,7 @@ type URLRepositoryInterface interface {
 
 	SaveURLToLocalStorage(url model.URLEntity) error
 	IsURLListUnique(ctx context.Context, shortURLList []string) (bool, error)
+	//RemoveEntityFromFile(filepath string, shortURL string) error
 }
 
 type LocalURLRepository struct {
@@ -285,7 +286,10 @@ func (w *Writer) WriteEntity(entity *model.URLEntity) error {
 	return w.writer.Flush()
 }
 
-func (w *Writer) BulkWriteEntities(entities []model.URLBulkCreate) error {
+func (w *Writer) BulkWriteEntities(entities []model.URLBulkCreate, toTruncate bool) error {
+	if toTruncate {
+		os.Truncate(w.file.Name(), 0)
+	}
 	defer w.Close()
 	for _, entity := range entities {
 		entityForFile := model.URLEntity{
@@ -341,6 +345,23 @@ func (s *FileScanner) CollectData() ([]model.URLEntity, error) {
 			return nil, err
 		}
 		result = append(result, object)
+	}
+	return result, nil
+}
+
+func (s *FileScanner) CollectFilteredData(shortURL string) ([]model.URLBulkCreate, error) {
+	var result []model.URLBulkCreate
+	for s.scanner.Scan() {
+
+		data := s.scanner.Bytes()
+
+		object := model.URLBulkCreate{}
+		if err := json.Unmarshal(data, &object); err != nil {
+			return nil, err
+		}
+		if object.ShortURL != shortURL {
+			result = append(result, object)
+		}
 	}
 	return result, nil
 }

@@ -146,7 +146,7 @@ func (s *URLService) BulkCreate(ctx context.Context, urls []model.URLBulkCreateR
 			return []model.URLBulkCreateResponse{}, fmt.Errorf("%w", err)
 		}
 		defer fileWriter.Close()
-		err = fileWriter.BulkWriteEntities(entities)
+		err = fileWriter.BulkWriteEntities(entities, false)
 		if err != nil {
 			return []model.URLBulkCreateResponse{}, fmt.Errorf("%w", err)
 		}
@@ -168,6 +168,23 @@ func (s *URLService) Delete(ctx context.Context, shortURL string) error {
 	if err != nil {
 		return fmt.Errorf("%w", err)
 	}
+
+	if s.app.Cfg.FileStoragePath != "" {
+		fileWriter, err := repository.NewWriter(s.app.Cfg.FileStoragePath)
+		if err != nil {
+			s.app.Logger.Error("could not create file writer",
+				zap.String("path", s.app.Cfg.FileStoragePath),
+				zap.String("error message", err.Error()),
+			)
+			return fmt.Errorf("%w", err)
+		}
+		defer fileWriter.Close()
+		err = utility.RemoveEntityFromFile(s.app.Cfg.FileStoragePath, shortURL, s.app.Logger)
+		if err != nil {
+			fmt.Errorf("%w", err)
+		}
+	}
+
 	return nil
 }
 
