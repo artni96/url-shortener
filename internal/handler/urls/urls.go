@@ -266,7 +266,11 @@ func (h *URLHandler) UpdateURLHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, repository.ErrURLNotFound) {
 			errMessage := err.Error()
-			ErrorResponse(w, errMessage, http.StatusNotFound, h.logger)
+			ErrorResponse(w, errMessage, http.StatusBadRequest, h.logger)
+			return
+		} else if errors.Is(err, repository.ErrOriginalURLAlreadyExists) {
+			errMessage := err.Error()
+			ErrorResponse(w, errMessage, http.StatusConflict, h.logger)
 			return
 		}
 	}

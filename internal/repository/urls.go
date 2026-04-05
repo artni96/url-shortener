@@ -64,12 +64,13 @@ func (repo *LocalURLRepository) Create(ctx context.Context, originalURL, shortUR
 		result, err := repo.db.ExecContext(ctx, insertQuery, originalURL, shortURL)
 		if err != nil {
 			if errors.As(err, &uniqueConstrErr) {
-
-				selectQuery = "SELECT original_url, short_url FROM urls WHERE original_url = $1"
-				repo.db.GetContext(ctx, &entity, selectQuery, originalURL)
+				//
+				//selectQuery = "SELECT original_url, short_url FROM urls WHERE original_url = $1"
+				//repo.db.GetContext(ctx, &entity, selectQuery, originalURL)
 
 				return entity, fmt.Errorf("%w: %s", ErrOriginalURLAlreadyExists, originalURL)
 			}
+			return entity, fmt.Errorf("%w", err)
 		}
 		if result == nil {
 			return model.URLEntity{}, ErrURLNotCreated
@@ -244,8 +245,12 @@ func (repo *LocalURLRepository) Update(ctx context.Context, entity model.URLEnti
 			return updatedEntity, fmt.Errorf("%w", err)
 		}
 
+		var uniqueConstrErr *pgconn.PgError
 		resp, err := stmt.ExecContext(ctx, entity.ShortURL, entity.OriginalURL)
 		if err != nil {
+			if errors.As(err, &uniqueConstrErr) {
+				return entity, fmt.Errorf("%w: %s", ErrOriginalURLAlreadyExists, entity.OriginalURL)
+			}
 			return updatedEntity, fmt.Errorf("%w", err)
 		}
 
@@ -256,6 +261,12 @@ func (repo *LocalURLRepository) Update(ctx context.Context, entity model.URLEnti
 		updatedEntity.OriginalURL = entity.OriginalURL
 		updatedEntity.ShortURL = entity.ShortURL
 		return updatedEntity, nil
+	}
+
+	for _, originalURL := range repo.urls {
+		if originalURL == entity.OriginalURL {
+			return updatedEntity, ErrOriginalURLAlreadyExists
+		}
 	}
 
 	for dbShortURL := range repo.urls {

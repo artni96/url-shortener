@@ -451,6 +451,86 @@ func TestGetListHandler(t *testing.T) {
 	}
 }
 
+func TestUpdateURLHandler(t *testing.T) {
+	h := testHandler(t)
+
+	type want struct {
+		status      int
+		contentType string
+		message     string
+	}
+	type request struct {
+		method string
+		body   string
+	}
+	tests := []struct {
+		name    string
+		request request
+		want    want
+	}{
+		{
+			name: "success",
+			request: request{
+				method: http.MethodPut,
+				body:   `{"url":"https://google.com"}`,
+			},
+			want: want{
+				status:      http.StatusOK,
+				contentType: "application/json",
+				message:     `{"url":"https://google.com"}`,
+			},
+		},
+		{
+			name: "not found",
+			request: request{
+				method: http.MethodPut,
+				body:   `{"url":"https://test1.com"}`,
+			},
+			want: want{
+				status:      http.StatusBadRequest,
+				contentType: "application/json",
+				message:     `{"error":"url not found"}`,
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body := []byte("https://practicum.yandex.ru/")
+			testEntityReqBody := strings.NewReader(string(body))
+
+			testEntityReq := httptest.NewRequest(http.MethodPost, "/", testEntityReqBody)
+			w := httptest.NewRecorder()
+			h.CreateURLHandler(w, testEntityReq)
+
+			testEntityResult := w.Result()
+			assert.Equal(t, http.StatusCreated, testEntityResult.StatusCode)
+			defer testEntityResult.Body.Close()
+			testEntityBody, err := io.ReadAll(testEntityResult.Body)
+			prefix := "http://localhost:8080/"
+			shortURL := strings.TrimPrefix(string(testEntityBody), prefix)
+
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			reqBody := strings.NewReader(tt.request.body)
+			uri := fmt.Sprintf("/%s", shortURL)
+			if tt.name == "not found" {
+				uri = fmt.Sprintf("/%stest", shortURL)
+			}
+			req := httptest.NewRequest(tt.request.method, uri, reqBody)
+
+			w = httptest.NewRecorder()
+			h.UpdateURLHandler(w, req)
+			res := w.Result()
+			defer res.Body.Close()
+			assert.Equal(t, tt.want.status, res.StatusCode)
+			resBody, err := io.ReadAll(res.Body)
+			assert.JSONEq(t, tt.want.message, string(resBody))
+		})
+	}
+}
+
 func TestDeleteURLHandler(t *testing.T) {
 	h := testHandler(t)
 
@@ -504,11 +584,10 @@ func TestDeleteURLHandler(t *testing.T) {
 				testEntityResult := w.Result()
 				assert.Equal(t, http.StatusCreated, testEntityResult.StatusCode)
 				defer testEntityResult.Body.Close()
-				shortURLBody, err := io.ReadAll(testEntityResult.Body)
+				testEntityBody, err := io.ReadAll(testEntityResult.Body)
 
 				prefix := "http://localhost:8080/"
-				shortURL = strings.TrimPrefix(string(shortURLBody), prefix)
-				fmt.Println(shortURL)
+				shortURL = strings.TrimPrefix(string(testEntityBody), prefix)
 				if err != nil {
 					t.Fatal(err)
 				}
