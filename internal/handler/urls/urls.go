@@ -134,7 +134,7 @@ func (h *URLHandler) BulkCreateURLHandler(w http.ResponseWriter, r *http.Request
 
 	responseData, err := h.service.BulkCreate(*h.ctx, body, h.responseDomain)
 	if err != nil {
-		if errors.As(err, &repository.ErrShortURLAlreadyExists) {
+		if errors.Is(err, repository.ErrShortURLAlreadyExists) {
 			errMessage := err.Error()
 			ErrorResponse(w, errMessage, http.StatusBadRequest, h.logger)
 			return
