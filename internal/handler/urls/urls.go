@@ -76,7 +76,6 @@ func (h *URLHandler) ShortenURLHandler(w http.ResponseWriter, r *http.Request) {
 			ErrorResponse(w, errMessage, http.StatusInternalServerError, h.logger)
 			return
 		} else if errors.Is(err, repository.ErrOriginalURLAlreadyExists) {
-
 			w.WriteHeader(http.StatusConflict)
 			resp, err := json.Marshal(responseData)
 			if err != nil {
@@ -269,8 +268,17 @@ func (h *URLHandler) UpdateURLHandler(w http.ResponseWriter, r *http.Request) {
 			ErrorResponse(w, errMessage, http.StatusBadRequest, h.logger)
 			return
 		} else if errors.Is(err, repository.ErrOriginalURLAlreadyExists) {
-			errMessage := err.Error()
-			ErrorResponse(w, errMessage, http.StatusConflict, h.logger)
+			responseData := model.URLCreateResponse{
+				Result: entityToUpdate.OriginalURL,
+			}
+			w.WriteHeader(http.StatusConflict)
+			resp, err := json.Marshal(responseData)
+			if err != nil {
+				errMessage := fmt.Sprintf("Could not create short URL for %s", body.OriginalURL)
+				ErrorResponse(w, errMessage, http.StatusInternalServerError, h.logger)
+				return
+			}
+			w.Write(resp)
 			return
 		}
 	}

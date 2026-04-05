@@ -492,10 +492,26 @@ func TestUpdateURLHandler(t *testing.T) {
 				message:     `{"error":"url not found"}`,
 			},
 		},
+		{
+			name: "url already exists",
+			request: request{
+				method: http.MethodPut,
+				body:   `{"url":"https://test1.com"}`,
+			},
+			want: want{
+				status:      http.StatusConflict,
+				contentType: "application/json",
+				message:     `{"result":"https://test1.com"}`,
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			body := []byte("https://practicum.yandex.ru/")
+
+			if tt.name == "url already exists" {
+				body = []byte("https://test1.com")
+			}
 			testEntityReqBody := strings.NewReader(string(body))
 
 			testEntityReq := httptest.NewRequest(http.MethodPost, "/", testEntityReqBody)
