@@ -21,6 +21,7 @@ var ErrOriginalURLAlreadyExists = errors.New("url already exists")
 var ErrURLNotFound = errors.New("url not found")
 var ErrURLNotCreated = errors.New("could not create url")
 var ErrURLListIsNotUnique = errors.New("url list is not unique")
+var ErrDuplicatedURL = errors.New(fmt.Sprintf("duplicated url"))
 
 type URLRepositoryInterface interface {
 	GetList(ctx context.Context) ([]model.URLEntity, error)
@@ -32,7 +33,6 @@ type URLRepositoryInterface interface {
 
 	SaveURLToLocalStorage(url model.URLEntity) error
 	IsURLListUnique(ctx context.Context, shortURLList []string) (bool, error)
-	//RemoveEntityFromFile(filepath string, shortURL string) error
 }
 
 type LocalURLRepository struct {
@@ -151,6 +151,9 @@ func (repo *LocalURLRepository) BulkCreate(ctx context.Context, urls []model.URL
 
 	var result []model.URLBulkCreate
 
+	urlDuplicates := map[string]int{}
+	var duplicateErrs []error
+
 	if repo.db != nil {
 		tx, err := repo.db.BeginTxx(ctx, nil)
 		if err != nil {
@@ -178,7 +181,7 @@ func (repo *LocalURLRepository) BulkCreate(ctx context.Context, urls []model.URL
 				OriginalURL:   url.OriginalURL,
 			}
 			result = append(result, entity)
-
+			urlDuplicates[entity.OriginalURL] += 1
 		}
 		if len(errs) > 0 {
 			err := tx.Rollback()
@@ -187,7 +190,33 @@ func (repo *LocalURLRepository) BulkCreate(ctx context.Context, urls []model.URL
 			}
 			return nil, errors.Join(errs...)
 		}
+
+		for url, count := range urlDuplicates {
+			if count > 1 {
+				duplicateErrs = append(duplicateErrs, fmt.Errorf("%w: %s", ErrDuplicatedURL, url))
+			}
+		}
+		if len(duplicateErrs) > 0 {
+			err := tx.Rollback()
+			if err != nil {
+				return nil, fmt.Errorf("%w", err)
+			}
+			return nil, errors.Join(duplicateErrs...)
+		}
 		return result, tx.Commit()
+	}
+
+	for _, url := range urls {
+		urlDuplicates[url.OriginalURL] += 1
+	}
+
+	for url, count := range urlDuplicates {
+		if count > 1 {
+			duplicateErrs = append(duplicateErrs, fmt.Errorf("%w: %s", ErrDuplicatedURL, url))
+		}
+	}
+	if len(duplicateErrs) > 0 {
+		return nil, errors.Join(duplicateErrs...)
 	}
 
 	for _, url := range urls {

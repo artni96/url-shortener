@@ -19,7 +19,7 @@ type URLServiceInterface interface {
 	GetByShortURL(ctx context.Context, urlID string) (string, error)
 	Create(ctx context.Context, urlStr string, responseDomain string) (string, error)
 	BulkCreate(ctx context.Context, urls []model.URLBulkCreateRequest, responseDomain string) ([]model.URLBulkCreateResponse, error)
-	Update(ctx context.Context, entity model.URLEntity, responseDomain string) (string, error)
+	Update(ctx context.Context, entity model.URLEntity) (string, error)
 	Delete(ctx context.Context, urlID string) error
 }
 type URLService struct {
@@ -173,7 +173,7 @@ func (s *URLService) BulkCreate(ctx context.Context, urls []model.URLBulkCreateR
 	return response, nil
 }
 
-func (s *URLService) Update(ctx context.Context, entity model.URLEntity, responseDomain string) (string, error) {
+func (s *URLService) Update(ctx context.Context, entity model.URLEntity) (string, error) {
 	updatedEntity, err := s.repo.Update(ctx, entity)
 	if err != nil {
 		return "", fmt.Errorf("%w", err)

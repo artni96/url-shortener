@@ -360,6 +360,28 @@ func TestBulkCreateURLHandler(t *testing.T) {
 				contentType: "application/json",
 			},
 		},
+
+		{
+			name: "duplicated url",
+			request: request{
+				body: `[
+						{
+							"correlation_id":"1",
+							"original_url":"http://dqj7vsrbcet.com/ud5irar"
+						},
+						{
+							"correlation_id":"2",
+							"original_url":"http://dqj7vsrbcet.com/ud5irar"
+						}
+					]`,
+				method: http.MethodPost,
+			},
+			want: want{
+				status:      http.StatusConflict,
+				contentType: "application/json",
+				message:     `{"error":"duplicated url: http://dqj7vsrbcet.com/ud5irar"}`,
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

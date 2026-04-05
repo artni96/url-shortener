@@ -138,6 +138,10 @@ func (h *URLHandler) BulkCreateURLHandler(w http.ResponseWriter, r *http.Request
 			errMessage := err.Error()
 			ErrorResponse(w, errMessage, http.StatusBadRequest, h.logger)
 			return
+		} else if errors.Is(err, repository.ErrDuplicatedURL) {
+			errMessage := err.Error()
+			ErrorResponse(w, errMessage, http.StatusConflict, h.logger)
+			return
 		}
 		errorMessage := "could not bulk create short URL"
 		ErrorResponse(w, errorMessage, http.StatusInternalServerError, h.logger)
@@ -258,7 +262,7 @@ func (h *URLHandler) UpdateURLHandler(w http.ResponseWriter, r *http.Request) {
 		ShortURL:    shortURL,
 	}
 	w.Header().Set("Content-Type", "application/json")
-	updatedEntity, err := h.service.Update(*h.ctx, entityToUpdate, h.responseDomain)
+	updatedEntity, err := h.service.Update(*h.ctx, entityToUpdate)
 	if err != nil {
 		if errors.Is(err, repository.ErrURLNotFound) {
 			errMessage := err.Error()
@@ -316,7 +320,6 @@ func URLRouter(ctx *context.Context, app *config.App, urlService service.URLServ
 		r.Get("/{id}", urlHandler.GetURLHandler)
 		r.Put("/{id}", urlHandler.UpdateURLHandler)
 		r.Delete("/{id}", urlHandler.DeleteURLHandler)
-
 	})
 	return r
 }
