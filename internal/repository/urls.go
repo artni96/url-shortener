@@ -305,7 +305,7 @@ func (w *Writer) WriteEntity(entity *model.URLEntity) error {
 	return w.writer.Flush()
 }
 
-func (w *Writer) BulkWriteEntities(entities []model.URLBulkCreate, toTruncate bool) error {
+func (w *Writer) BulkWriteEntities(entities []model.URLEntity, toTruncate bool) error {
 	if toTruncate {
 		err := os.Truncate(w.file.Name(), 0)
 		if err != nil {
