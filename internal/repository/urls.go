@@ -146,6 +146,8 @@ func (repo *LocalURLRepository) BulkCreate(ctx context.Context, urls []model.URL
 	repo.mu.Lock()
 	defer repo.mu.Unlock()
 
+	var errs []error
+
 	var result []model.URLBulkCreate
 
 	if repo.db != nil {
@@ -160,11 +162,15 @@ func (repo *LocalURLRepository) BulkCreate(ctx context.Context, urls []model.URL
 		if err != nil {
 			return nil, err
 		}
+		var uniqueConstrErr *pgconn.PgError
 		for _, url := range urls {
 			_, err = stmt.ExecContext(ctx, url.ShortURL, url.OriginalURL)
 			if err != nil {
-				tx.Rollback()
-				return nil, err
+				if errors.Is(err, uniqueConstrErr) {
+					errs = append(errs, fmt.Errorf("%w: %s", ErrOriginalURLAlreadyExists, url.OriginalURL))
+				}
+				continue
+
 			}
 			entity := model.URLBulkCreate{
 				CorrelationID: url.CorrelationID,
@@ -173,6 +179,10 @@ func (repo *LocalURLRepository) BulkCreate(ctx context.Context, urls []model.URL
 			}
 			result = append(result, entity)
 
+		}
+		if len(errs) > 0 {
+			tx.Rollback()
+			return nil, errors.Join(errs...)
 		}
 		return result, tx.Commit()
 	}
@@ -196,18 +206,25 @@ func (repo *LocalURLRepository) Delete(ctx context.Context, shortURL string) err
 
 	if repo.db != nil {
 
-		query := "DELETE FROM urls WHERE original_url = $1 RETURNING short_url"
+		query := "DELETE FROM urls WHERE short_url = $1"
 		stmt, err := repo.db.PrepareContext(ctx, query)
 		if err != nil {
 			return fmt.Errorf("%w", err)
 		}
 		resp, err := stmt.ExecContext(ctx, shortURL)
-		if resp != nil {
-			return fmt.Errorf("%w", ErrURLNotFound)
+
+		if err != nil {
+			return err
 		}
+
+		isRemoved, err := resp.RowsAffected()
 		if err != nil {
 			return fmt.Errorf("%w", err)
 		}
+		if isRemoved == 0 {
+			return fmt.Errorf("%w", ErrURLNotFound)
+		}
+
 		return nil
 	}
 
@@ -288,8 +305,12 @@ func (w *Writer) WriteEntity(entity *model.URLEntity) error {
 
 func (w *Writer) BulkWriteEntities(entities []model.URLBulkCreate, toTruncate bool) error {
 	if toTruncate {
-		os.Truncate(w.file.Name(), 0)
+		err := os.Truncate(w.file.Name(), 0)
+		if err != nil {
+			return fmt.Errorf("could not truncate file at ulr removal: %w", err)
+		}
 	}
+
 	defer w.Close()
 	for _, entity := range entities {
 		entityForFile := model.URLEntity{
