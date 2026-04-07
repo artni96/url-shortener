@@ -173,15 +173,15 @@ func (repo *LocalURLRepository) BulkCreate(ctx context.Context, urls []model.URL
 			query += fmt.Sprintf("($%d, $%d)", len(values)+1, len(values)+2)
 			values = append(values, url.OriginalURL, url.ShortURL)
 			result = append(result, model.URLBulkCreate{
-				OriginalURL: url.OriginalURL,
-				ShortURL:    url.ShortURL,
+				CorrelationID: url.CorrelationID,
+				ShortURL:      url.ShortURL,
 			})
 		}
 		var uniqueConstrErr *pgconn.PgError
 		_, err = tx.ExecContext(ctx, query, values...)
 		if err != nil {
 			if errors.As(err, &uniqueConstrErr) {
-				return nil, fmt.Errorf("duplicate urls: %w", err)
+				return nil, ErrDuplicatedURL
 			}
 			return nil, fmt.Errorf("failed to bulk create: %w", err)
 		}

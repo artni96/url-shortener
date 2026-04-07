@@ -29,7 +29,7 @@ func run(cfg *config.Config) error {
 	DBCon, err := db.InitDBConnection(ctx, app)
 
 	if err != nil {
-		app.Logger.Error("failed to connect to database", zap.Error(err))
+		app.Logger.Info("failed to connect to database", zap.Error(err))
 	}
 
 	if DBCon != nil {

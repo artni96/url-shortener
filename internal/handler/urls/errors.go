@@ -22,12 +22,12 @@ func ErrorResponse(w http.ResponseWriter, errMessage string, statusCode int, log
 	w.WriteHeader(statusCode)
 
 	if statusCode >= 500 {
-		logger.Error(errMessage)
+		logger.Info(errMessage)
 		w.Write([]byte(`{"error": "Server error. Please try again."}`))
 
 	} else {
 		splitMessage := strings.Split(errMessage, "\n")
-		
+
 		if len(splitMessage) > 1 {
 			var errs []string
 			for _, line := range splitMessage {
