@@ -185,7 +185,10 @@ func (repo *LocalURLRepository) BulkCreate(ctx context.Context, urls []model.URL
 			}
 			return nil, fmt.Errorf("failed to bulk create: %w", err)
 		}
-		return result, tx.Commit()
+		if err := tx.Commit(); err != nil {
+			return nil, fmt.Errorf("failed to commit bulk create: %w", err)
+		}
+		return result, nil
 	}
 
 	//	tx, err := repo.db.BeginTxx(ctx, nil)
