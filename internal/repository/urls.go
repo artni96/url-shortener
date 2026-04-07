@@ -132,7 +132,7 @@ func (repo *LocalURLRepository) GetList(ctx context.Context) ([]model.URLEntity,
 		err := repo.db.SelectContext(ctx, &entities, selectQuery)
 
 		if err != nil {
-			return nil, fmt.Errorf("%w", err)
+			return nil, fmt.Errorf("GetList - failure to execute request: %w", err)
 		}
 		return entities, nil
 	}
@@ -147,7 +147,7 @@ func (repo *LocalURLRepository) BulkCreate(ctx context.Context, urls []model.URL
 	repo.mu.Lock()
 	defer repo.mu.Unlock()
 
-	var errs []error
+	//var errs []error
 
 	var result []model.URLBulkCreate
 
@@ -157,54 +157,87 @@ func (repo *LocalURLRepository) BulkCreate(ctx context.Context, urls []model.URL
 	if repo.db != nil {
 		tx, err := repo.db.BeginTxx(ctx, nil)
 		if err != nil {
-			return nil, fmt.Errorf("%w", err)
+			return nil, fmt.Errorf("BulkCreate - failure to begin transaction: %w", err)
 		}
 
-		query := "INSERT INTO urls (short_url, original_url) VALUES ($1, $2)"
-		stmt, err := tx.PrepareContext(ctx, query)
-		if err != nil {
-			return nil, err
+		defer tx.Rollback()
+
+		query := "INSERT INTO urls (original_url, short_url) VALUES "
+		values := []interface{}{}
+		result := []model.URLBulkCreate{}
+
+		for i, url := range urls {
+			if i > 0 {
+				query += ", "
+			}
+			query += fmt.Sprintf("($%d, $%d)", len(values)+1, len(values)+2)
+			values = append(values, url.OriginalURL, url.ShortURL)
+			result = append(result, model.URLBulkCreate{
+				OriginalURL: url.OriginalURL,
+				ShortURL:    url.ShortURL,
+			})
 		}
 		var uniqueConstrErr *pgconn.PgError
-		for _, url := range urls {
-			_, err = stmt.ExecContext(ctx, url.ShortURL, url.OriginalURL)
-			if err != nil {
-				if errors.As(err, &uniqueConstrErr) {
-					errs = append(errs, fmt.Errorf("%w: %s", ErrOriginalURLAlreadyExists, url.OriginalURL))
-				}
-				continue
-
+		_, err = tx.ExecContext(ctx, query, values...)
+		if err != nil {
+			if errors.As(err, &uniqueConstrErr) {
+				return nil, fmt.Errorf("duplicate urls: %w", err)
 			}
-			entity := model.URLBulkCreate{
-				CorrelationID: url.CorrelationID,
-				ShortURL:      url.ShortURL,
-				OriginalURL:   url.OriginalURL,
-			}
-			result = append(result, entity)
-			urlDuplicates[entity.OriginalURL] += 1
-		}
-		if len(errs) > 0 {
-			err := tx.Rollback()
-			if err != nil {
-				return nil, fmt.Errorf("%w", err)
-			}
-			return nil, errors.Join(errs...)
-		}
-
-		for url, count := range urlDuplicates {
-			if count > 1 {
-				duplicateErrs = append(duplicateErrs, fmt.Errorf("%w: %s", ErrDuplicatedURL, url))
-			}
-		}
-		if len(duplicateErrs) > 0 {
-			err := tx.Rollback()
-			if err != nil {
-				return nil, fmt.Errorf("%w", err)
-			}
-			return nil, errors.Join(duplicateErrs...)
+			return nil, fmt.Errorf("failed to bulk create: %w", err)
 		}
 		return result, tx.Commit()
 	}
+
+	//	tx, err := repo.db.BeginTxx(ctx, nil)
+	//	if err != nil {
+	//		return nil, fmt.Errorf("BulkCreate - failed to begin transaction: %w", err)
+	//	}
+	//
+	//	query := "INSERT INTO urls (short_url, original_url) VALUES ($1, $2)"
+	//	stmt, err := tx.PrepareContext(ctx, query)
+	//	if err != nil {
+	//		return nil, fmt.Errorf("BulkCreate - failed to prepare statement: %w", err)
+	//	}
+	//	var uniqueConstrErr *pgconn.PgError
+	//	for _, url := range urls {
+	//		_, err = stmt.ExecContext(ctx, url.ShortURL, url.OriginalURL)
+	//		if err != nil {
+	//			if errors.As(err, &uniqueConstrErr) {
+	//				errs = append(errs, fmt.Errorf("%w: %s", ErrOriginalURLAlreadyExists, url.OriginalURL))
+	//			}
+	//			continue
+	//
+	//		}
+	//		entity := model.URLBulkCreate{
+	//			CorrelationID: url.CorrelationID,
+	//			ShortURL:      url.ShortURL,
+	//			OriginalURL:   url.OriginalURL,
+	//		}
+	//		result = append(result, entity)
+	//		urlDuplicates[entity.OriginalURL] += 1
+	//	}
+	//	if len(errs) > 0 {
+	//		err := tx.Rollback()
+	//		if err != nil {
+	//			return nil, fmt.Errorf("%w", err)
+	//		}
+	//		return nil, errors.Join(errs...)
+	//	}
+	//
+	//	for url, count := range urlDuplicates {
+	//		if count > 1 {
+	//			duplicateErrs = append(duplicateErrs, fmt.Errorf("%w: %s", ErrDuplicatedURL, url))
+	//		}
+	//	}
+	//	if len(duplicateErrs) > 0 {
+	//		err := tx.Rollback()
+	//		if err != nil {
+	//			return nil, fmt.Errorf("%w", err)
+	//		}
+	//		return nil, errors.Join(duplicateErrs...)
+	//	}
+	//	return result, tx.Commit()
+	//}
 
 	for _, url := range urls {
 		urlDuplicates[url.OriginalURL] += 1
@@ -256,7 +289,7 @@ func (repo *LocalURLRepository) Update(ctx context.Context, entity model.URLEnti
 				},
 				)
 			}
-			return updatedEntity, fmt.Errorf("%w", err)
+			return updatedEntity, fmt.Errorf("%w", fmt.Errorf("failed to update url entity: %w", err))
 		}
 
 		_, err = resp.RowsAffected()
@@ -294,17 +327,17 @@ func (repo *LocalURLRepository) Delete(ctx context.Context, shortURL string) err
 		query := "DELETE FROM urls WHERE short_url = $1"
 		stmt, err := repo.db.PrepareContext(ctx, query)
 		if err != nil {
-			return fmt.Errorf("%w", err)
+			return fmt.Errorf("delete - failed to prepare statement: %w", err)
 		}
 		resp, err := stmt.ExecContext(ctx, shortURL)
 
 		if err != nil {
-			return fmt.Errorf("%w", err)
+			return fmt.Errorf("delete - failed to execute request: %w", err)
 		}
 
 		isRemoved, err := resp.RowsAffected()
 		if err != nil {
-			return fmt.Errorf("%w", err)
+			return fmt.Errorf("%w", fmt.Errorf("delete - failed to get rows affected: %w", err))
 		}
 		if isRemoved == 0 {
 			return fmt.Errorf("%w", ErrURLNotFound)
@@ -327,11 +360,11 @@ func (repo *LocalURLRepository) IsURLListUnique(ctx context.Context, shortURLLis
 		query := "SELECT original_url FROM urls WHERE short_url IN ($1)"
 		stmt, err := repo.db.PrepareContext(ctx, query)
 		if err != nil {
-			return false, fmt.Errorf("%w", err)
+			return false, fmt.Errorf("failed to prepare statement: %w", err)
 		}
 		result, err := stmt.QueryContext(ctx, shortURLList)
 		if err != nil {
-			return false, fmt.Errorf("%w", err)
+			return false, fmt.Errorf("failed to execute request: %w", err)
 		}
 		if result != nil {
 			return false, ErrURLListIsNotUnique
@@ -431,7 +464,7 @@ type FileScanner struct {
 func NewFileScanner(filename string) (*FileScanner, error) {
 	file, err := os.OpenFile(filename, os.O_RDONLY|os.O_CREATE, 0644)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to open file %s: %w", filename, err)
 	}
 	return &FileScanner{file: file, scanner: bufio.NewScanner(file)}, nil
 }
@@ -494,7 +527,7 @@ func (repo *LocalURLRepository) uploadLocalStorage(filepath string) error {
 		repo.logger.Info("could not collect data from file",
 			zap.String("filepath", filepath),
 			zap.String("error", err.Error()))
-		return err
+		return fmt.Errorf("could not collect data from file: %w", err)
 	}
 	for _, object := range result {
 		err := repo.SaveURLToLocalStorage(object)

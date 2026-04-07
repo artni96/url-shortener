@@ -1,7 +1,6 @@
 package urls
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -25,7 +24,7 @@ func testHandler(t *testing.T) *URLHandler {
 	testFile := filepath.Join(tempDir, "data.json")
 	testLogger := zap.NewNop()
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	cfg := config.Config{
 		ServerAddress:   "localhost:8080",

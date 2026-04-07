@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 
 	"github.com/artni96/url-shortener/internal/config"
@@ -26,7 +27,12 @@ func run(cfg *config.Config) error {
 	}
 
 	DBCon, err := db.InitDBConnection(ctx, app)
-	
+
+	if err != nil {
+		app.Logger.Error("failed to connect to database", zap.Error(err))
+		return err
+	}
+
 	if DBCon != nil {
 		app.DB = DBCon
 		defer DBCon.Close()
@@ -34,7 +40,8 @@ func run(cfg *config.Config) error {
 
 	urlRepository, err := repository.NewURLRepository(app)
 	if err != nil {
-		return err
+		app.Logger.Error("failed to initialize url repository", zap.Error(err))
+		return fmt.Errorf("url repository is not initialized: %w", err)
 	}
 	urlService := service.NewURLService(urlRepository, app)
 

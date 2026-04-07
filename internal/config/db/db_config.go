@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/artni96/url-shortener/internal/config"
@@ -15,25 +16,20 @@ import (
 
 func InitDBConnection(ctx context.Context, app *config.App) (*sqlx.DB, error) {
 	if app.Cfg.DatabaseDsn == "" {
-		app.Logger.Info("database dsn is empty, cannot connect to database")
-		return nil, errors.New("database dsn is required")
+		return nil, errors.New("database dsn is not provided")
 	}
+
+	db, err := sqlx.Open("pgx", app.Cfg.DatabaseDsn)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to database: %w", err)
+	}
+
 	localCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 
-	db := sqlx.MustOpen("pgx", app.Cfg.DatabaseDsn)
-	if db == nil {
-		app.Logger.Info("failed to connect to database")
-		return nil, errors.New("failed to connect to database")
-	}
-
-	err := db.PingContext(localCtx)
+	err = db.PingContext(localCtx)
 	if err != nil {
-		app.Logger.Info("failed to ping database, trying to work with local file storage",
-			zap.String("database destination", app.Cfg.DatabaseDsn),
-			zap.String("error message", err.Error()),
-		)
-		return nil, err
+		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
 	if err := runMigrations(db); err != nil {
@@ -50,7 +46,7 @@ func InitDBConnection(ctx context.Context, app *config.App) (*sqlx.DB, error) {
 func runMigrations(db *sqlx.DB) error {
 	driver, err := postgres.WithInstance(db.DB, &postgres.Config{})
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to initialize postgres driver: %w", err)
 	}
 
 	migrator, err := migrate.NewWithDatabaseInstance(
@@ -59,11 +55,11 @@ func runMigrations(db *sqlx.DB) error {
 		driver,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to initialize migrator: %w", err)
 	}
 
 	if err := migrator.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
-		return err
+		return fmt.Errorf("failed to apply migrations: %w", err)
 	}
 
 	return nil
