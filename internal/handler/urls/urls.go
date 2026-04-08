@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/artni96/url-shortener/internal/config"
+	"github.com/artni96/url-shortener/internal/handler/middlewares"
 	"github.com/artni96/url-shortener/internal/logger"
 	"github.com/artni96/url-shortener/internal/model"
 	"github.com/artni96/url-shortener/internal/repository"
@@ -295,9 +296,10 @@ func (h *URLHandler) DeleteURLHandler(w http.ResponseWriter, r *http.Request) {
 func URLRouter(ctx *context.Context, app *config.App, urlService service.URLServiceInterface) chi.Router {
 	r := chi.NewRouter()
 
+	r.Use(middlewares.PanicRecoverer(app.Logger))
 	r.Use(middleware.RealIP)
 	r.Use(logger.RequestLoggerMiddleware(app.Logger))
-	r.Use(middleware.Recoverer)
+	//r.Use(middlewares.Recoverer)
 	r.Use(config.GzipMiddleware)
 
 	urlHandler := NewURLHandler(ctx, app, urlService)

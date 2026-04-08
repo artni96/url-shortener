@@ -8,14 +8,16 @@ import (
 )
 
 type compressWriter struct {
-	w  http.ResponseWriter
-	zw *gzip.Writer
+	w       http.ResponseWriter
+	zw      *gzip.Writer
+	toClose bool
 }
 
 func newCompressWriter(w http.ResponseWriter) *compressWriter {
 	return &compressWriter{
-		w:  w,
-		zw: gzip.NewWriter(w),
+		w:       w,
+		zw:      gzip.NewWriter(w),
+		toClose: false,
 	}
 }
 
@@ -31,11 +33,15 @@ func (c *compressWriter) WriteHeader(statusCode int) {
 	if statusCode < 500 {
 		c.w.Header().Set("Content-Encoding", "gzip")
 	}
+	c.toClose = true
 	c.w.WriteHeader(statusCode)
 }
 
 func (c *compressWriter) Close() error {
-	return c.zw.Close()
+	if c.toClose {
+		return c.zw.Close()
+	}
+	return nil
 }
 
 type compressReader struct {
