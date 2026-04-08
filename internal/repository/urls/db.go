@@ -48,7 +48,7 @@ func (repo *DBURLRepository) Create(ctx context.Context, entity model.URLEntity)
 		if errors.As(err, &uniqueConstrErr) {
 
 			selectQuery = "SELECT original_url, short_url FROM urls WHERE original_url = $1"
-			repo.db.GetContext(ctx, responseEntity, selectQuery, entity.OriginalURL)
+			repo.db.GetContext(ctx, &responseEntity, selectQuery, entity.OriginalURL)
 
 			return responseEntity, fmt.Errorf("%w: %s", ErrOriginalURLAlreadyExists, entity.OriginalURL)
 		}
@@ -57,8 +57,6 @@ func (repo *DBURLRepository) Create(ctx context.Context, entity model.URLEntity)
 		return model.URLEntity{}, ErrURLNotCreated
 	}
 
-	//entity.OriginalURL = originalURL
-	//entity.ShortURL = shortURL
 	return entity, nil
 }
 

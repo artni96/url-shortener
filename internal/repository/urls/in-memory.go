@@ -40,15 +40,11 @@ func (repo *InMemoryURLRepository) Create(entity model.URLEntity) (model.URLEnti
 
 	for _, url := range repo.urls {
 		if url == entity.OriginalURL {
-			return model.URLEntity{}, ErrOriginalURLAlreadyExists
+			return entity, ErrOriginalURLAlreadyExists
 		}
 	}
 
 	repo.urls[entity.ShortURL] = entity.OriginalURL
-	//entity := model.URLEntity{
-	//	OriginalURL: originalURL,
-	//	ShortURL:    shortURL,
-	//}
 	return entity, nil
 }
 
