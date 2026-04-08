@@ -299,7 +299,6 @@ func URLRouter(ctx *context.Context, app *config.App, urlService service.URLServ
 	r.Use(middlewares.PanicRecoverer(app.Logger))
 	r.Use(middleware.RealIP)
 	r.Use(logger.RequestLoggerMiddleware(app.Logger))
-	//r.Use(middlewares.Recoverer)
 	r.Use(config.GzipMiddleware)
 
 	urlHandler := NewURLHandler(ctx, app, urlService)

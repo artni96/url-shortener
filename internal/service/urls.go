@@ -148,7 +148,7 @@ func (s *URLService) BulkCreate(ctx context.Context, urls []model.URLBulkCreateR
 		} else {
 			isURLListUnique, err = s.inMemoryRepository.IsURLListUnique(generatedURLList)
 		}
-		//isURLListUnique, err = s.repo.IsURLListUnique(ctx, generatedURLList)
+
 		if err != nil {
 			isURLListUnique = false
 		}
@@ -173,7 +173,7 @@ func (s *URLService) BulkCreate(ctx context.Context, urls []model.URLBulkCreateR
 	} else {
 		entities, err = s.inMemoryRepository.BulkCreate(toCreateList)
 	}
-	//entities, err := s.repo.BulkCreate(ctx, toCreateList)
+
 	if err != nil {
 		return nil, fmt.Errorf("%w", err)
 	}
@@ -253,7 +253,7 @@ func (s *URLService) Delete(ctx context.Context, shortURL string) error {
 	} else {
 		err = s.inMemoryRepository.Delete(shortURL)
 	}
-	//err := s.repo.Delete(ctx, shortURL)
+
 	if err != nil {
 		return fmt.Errorf("%w", err)
 	}
@@ -278,10 +278,11 @@ func (s *URLService) Delete(ctx context.Context, shortURL string) error {
 	return nil
 }
 
-func NewURLService(dbRepository urlrepo.DBURLRepositoryInterface, inMemoryRepository urlrepo.InMemoryURLRepositoryInterface, app *config.App) *URLService {
-	//return &URLService{
-	//	repo: repo, app: app,
-	//}
+func NewURLService(
+	dbRepository urlrepo.DBURLRepositoryInterface,
+	inMemoryRepository urlrepo.InMemoryURLRepositoryInterface,
+	app *config.App,
+) *URLService {
 	return &URLService{
 		dbRepository: dbRepository, inMemoryRepository: inMemoryRepository, app: app,
 	}
