@@ -34,23 +34,25 @@ func run(cfg *config.Config) error {
 
 	var urlDBRepository *urlrepo.DBURLRepository
 	var urlInMemoryRepository *urlrepo.InMemoryURLRepository
+	var urlService *service.URLService
+
 	if DBCon != nil {
 		app.DB = DBCon
 		urlDBRepository, err = urlrepo.NewDBURLRepository(app)
+		if err != nil {
+			app.Logger.Error("failed to initialize db url repository", zap.Error(err))
+			return fmt.Errorf("url db repository is not initialized: %w", err)
+		}
+		urlService = service.NewURLService(urlDBRepository, nil, app)
 		defer DBCon.Close()
 	} else {
 		urlInMemoryRepository, err = urlrepo.NewInMemoryURLRepository(app)
+		if err != nil {
+			app.Logger.Error("failed to initialize url in-memory repository", zap.Error(err))
+			return fmt.Errorf("url in-memory repository is not initialized: %w", err)
+		}
+		urlService = service.NewURLService(nil, urlInMemoryRepository, app)
 	}
-	//if err != nil {
-	//	return err
-	//}
-
-	//urlRepository, err := repository.NewURLRepository(app)
-	if err != nil {
-		app.Logger.Error("failed to initialize url repository", zap.Error(err))
-		return fmt.Errorf("url repository is not initialized: %w", err)
-	}
-	urlService := service.NewURLService(urlDBRepository, urlInMemoryRepository, app)
 
 	mainRouter := chi.NewRouter()
 	urlRouter := urls.URLRouter(&ctx, app, urlService)
