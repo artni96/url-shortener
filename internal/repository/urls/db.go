@@ -1,0 +1,206 @@
+package urls
+
+import (
+	"context"
+	"errors"
+	"fmt"
+
+	"github.com/artni96/url-shortener/internal/config"
+	"github.com/artni96/url-shortener/internal/model"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jmoiron/sqlx"
+	"go.uber.org/zap"
+)
+
+type DBURLRepositoryInterface interface {
+	Create(ctx context.Context, url model.URLEntity) (model.URLEntity, error)
+	BulkCreate(ctx context.Context, urls []model.URLBulkCreate) ([]model.URLBulkCreate, error)
+	GetByShortURL(ctx context.Context, shortURL string) (string, error)
+	GetList(ctx context.Context) ([]model.URLEntity, error)
+	Update(ctx context.Context, url model.URLEntity) (model.URLEntity, error)
+	Delete(ctx context.Context, shortURL string) error
+
+	IsURLListUnique(ctx context.Context, shortURLList []string) (bool, error)
+}
+type DBURLRepository struct {
+	db     *sqlx.DB
+	logger *zap.Logger
+}
+
+func (repo *DBURLRepository) Create(ctx context.Context, entity model.URLEntity) (model.URLEntity, error) {
+
+	responseEntity := model.URLEntity{}
+	selectQuery := "SELECT original_url, short_url FROM urls WHERE short_url = $1"
+	err := repo.db.GetContext(ctx, &entity, selectQuery, entity.ShortURL)
+
+	if err.Error() != "sql: no rows in result set" {
+		return model.URLEntity{}, err
+	}
+
+	if entity.ShortURL != "" && entity.ShortURL != entity.ShortURL {
+		return model.URLEntity{}, fmt.Errorf("%w: short url already exists", ErrShortURLAlreadyExists)
+	}
+	var uniqueConstrErr *pgconn.PgError
+	insertQuery := "INSERT INTO urls (original_url, short_url) VALUES ($1, $2)"
+
+	result, err := repo.db.ExecContext(ctx, insertQuery, entity.OriginalURL, entity.ShortURL)
+	if err != nil {
+		if errors.As(err, &uniqueConstrErr) {
+
+			selectQuery = "SELECT original_url, short_url FROM urls WHERE original_url = $1"
+			repo.db.GetContext(ctx, responseEntity, selectQuery, entity.OriginalURL)
+
+			return responseEntity, fmt.Errorf("%w: %s", ErrOriginalURLAlreadyExists, entity.OriginalURL)
+		}
+	}
+	if result == nil {
+		return model.URLEntity{}, ErrURLNotCreated
+	}
+
+	//entity.OriginalURL = originalURL
+	//entity.ShortURL = shortURL
+	return entity, nil
+}
+
+func (repo *DBURLRepository) BulkCreate(ctx context.Context, urls []model.URLBulkCreate) ([]model.URLBulkCreate, error) {
+
+	tx, err := repo.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("BulkCreate - failure to begin transaction: %w", err)
+	}
+
+	defer tx.Rollback()
+
+	query := "INSERT INTO urls (original_url, short_url) VALUES "
+	values := []interface{}{}
+	result := []model.URLBulkCreate{}
+
+	for i, url := range urls {
+		if i > 0 {
+			query += ", "
+		}
+		query += fmt.Sprintf("($%d, $%d)", len(values)+1, len(values)+2)
+		values = append(values, url.OriginalURL, url.ShortURL)
+		result = append(result, model.URLBulkCreate{
+			CorrelationID: url.CorrelationID,
+			ShortURL:      url.ShortURL,
+		})
+	}
+	var uniqueConstrErr *pgconn.PgError
+	_, err = tx.ExecContext(ctx, query, values...)
+	if err != nil {
+		if errors.As(err, &uniqueConstrErr) {
+			return nil, ErrDuplicatedURL
+		}
+		return nil, fmt.Errorf("failed to bulk create: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("failed to commit bulk create: %w", err)
+	}
+	return result, nil
+}
+
+func (repo *DBURLRepository) GetByShortURL(ctx context.Context, shortURL string) (string, error) {
+	var entity string
+
+	selectQuery := "SELECT original_url FROM urls where short_url = $1"
+	err := repo.db.GetContext(ctx, &entity, selectQuery, shortURL)
+
+	if err != nil {
+		return "", fmt.Errorf("%w: %s", ErrURLNotFound, shortURL)
+	}
+	return entity, nil
+}
+
+func (repo *DBURLRepository) GetList(ctx context.Context) ([]model.URLEntity, error) {
+	var entities []model.URLEntity
+
+	selectQuery := "SELECT original_url, short_url FROM urls"
+	err := repo.db.SelectContext(ctx, &entities, selectQuery)
+
+	if err != nil {
+		return nil, fmt.Errorf("GetList - failure to execute request: %w", err)
+	}
+	return entities, nil
+}
+
+func (repo *DBURLRepository) Update(ctx context.Context, entity model.URLEntity) (model.URLEntity, error) {
+	updatedEntity := model.URLEntity{}
+
+	query := "UPDATE urls SET original_url = $1 WHERE short_url = $2 RETURNING original_url"
+	stmt, err := repo.db.PrepareContext(ctx, query)
+
+	if err != nil {
+		return updatedEntity, fmt.Errorf("%w", err)
+	}
+
+	var uniqueConstrErr *pgconn.PgError
+	resp, err := stmt.ExecContext(ctx, entity.ShortURL, entity.OriginalURL)
+	if err != nil {
+		if errors.As(err, &uniqueConstrErr) {
+			selectQuery := "SELECT original_url, short_url FROM urls WHERE original_url = $1"
+			repo.db.GetContext(ctx, &entity, selectQuery, entity.OriginalURL)
+			return entity, fmt.Errorf("%w: %s", ErrOriginalURLAlreadyExists, model.URLEntity{
+				OriginalURL: entity.OriginalURL,
+				ShortURL:    entity.ShortURL,
+			},
+			)
+		}
+		return updatedEntity, fmt.Errorf("%w", fmt.Errorf("failed to update url entity: %w", err))
+	}
+
+	_, err = resp.RowsAffected()
+	if err != nil {
+		return updatedEntity, fmt.Errorf("%w", ErrURLNotFound)
+	}
+	updatedEntity.OriginalURL = entity.OriginalURL
+	updatedEntity.ShortURL = entity.ShortURL
+	return updatedEntity, nil
+}
+
+func (repo *DBURLRepository) Delete(ctx context.Context, shortURL string) error {
+	query := "DELETE FROM urls WHERE short_url = $1"
+	stmt, err := repo.db.PrepareContext(ctx, query)
+
+	if err != nil {
+		return fmt.Errorf("delete - failed to prepare statement: %w", err)
+	}
+	resp, err := stmt.ExecContext(ctx, shortURL)
+
+	if err != nil {
+		return fmt.Errorf("delete - failed to execute request: %w", err)
+	}
+
+	isRemoved, err := resp.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("%w", fmt.Errorf("delete - failed to get rows affected: %w", err))
+	}
+	if isRemoved == 0 {
+		return fmt.Errorf("%w", ErrURLNotFound)
+	}
+
+	return nil
+}
+
+func (repo *DBURLRepository) IsURLListUnique(ctx context.Context, shortURLList []string) (bool, error) {
+	query := "SELECT original_url FROM urls WHERE short_url IN ($1)"
+	stmt, err := repo.db.PrepareContext(ctx, query)
+	if err != nil {
+		return false, fmt.Errorf("failed to prepare statement: %w", err)
+	}
+	result, err := stmt.QueryContext(ctx, shortURLList)
+	if err != nil {
+		return false, fmt.Errorf("failed to execute request: %w", err)
+	}
+	if result != nil {
+		return false, ErrURLListIsNotUnique
+	}
+	return true, nil
+}
+
+func NewDBURLRepository(app *config.App) (*DBURLRepository, error) {
+	return &DBURLRepository{
+		db:     app.DB,
+		logger: app.Logger,
+	}, nil
+}

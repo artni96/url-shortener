@@ -12,7 +12,7 @@ import (
 
 	"github.com/artni96/url-shortener/internal/config"
 	"github.com/artni96/url-shortener/internal/config/db"
-	"github.com/artni96/url-shortener/internal/repository"
+	"github.com/artni96/url-shortener/internal/repository/urls"
 	"github.com/artni96/url-shortener/internal/service"
 	"github.com/artni96/url-shortener/internal/utility"
 	"github.com/stretchr/testify/assert"
@@ -43,11 +43,12 @@ func testHandler(t *testing.T) *URLHandler {
 		app.DB = testDB
 	}
 
-	urlRepo, err := repository.NewURLRepository(&app)
+	//urlRepo, err := repository.NewURLRepository(&app)
+	urlInMemoryRepository, err := urls.NewInMemoryURLRepository(&app)
 	if err != nil {
 		t.Fatal(err)
 	}
-	urlService := service.NewURLService(urlRepo, &app)
+	urlService := service.NewURLService(nil, urlInMemoryRepository, &app)
 	h := NewURLHandler(&ctx, &app, urlService)
 	return h
 }

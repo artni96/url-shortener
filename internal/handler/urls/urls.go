@@ -15,7 +15,7 @@ import (
 	"github.com/artni96/url-shortener/internal/handler/middlewares"
 	"github.com/artni96/url-shortener/internal/logger"
 	"github.com/artni96/url-shortener/internal/model"
-	"github.com/artni96/url-shortener/internal/repository"
+	"github.com/artni96/url-shortener/internal/repository/urls"
 	"github.com/artni96/url-shortener/internal/service"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -72,7 +72,7 @@ func (h *URLHandler) ShortenURLHandler(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, service.ErrFailedToCreated) {
 			ErrorResponse(w, err.Error(), http.StatusInternalServerError, h.logger)
 			return
-		} else if errors.Is(err, repository.ErrOriginalURLAlreadyExists) {
+		} else if errors.Is(err, urls.ErrOriginalURLAlreadyExists) {
 			w.WriteHeader(http.StatusConflict)
 			resp, err := json.Marshal(responseData)
 			if err != nil {
@@ -124,10 +124,10 @@ func (h *URLHandler) BulkCreateURLHandler(w http.ResponseWriter, r *http.Request
 
 	responseData, err := h.service.BulkCreate(*h.ctx, body, h.responseDomain)
 	if err != nil {
-		if errors.Is(err, repository.ErrShortURLAlreadyExists) {
+		if errors.Is(err, urls.ErrShortURLAlreadyExists) {
 			ErrorResponse(w, err.Error(), http.StatusBadRequest, h.logger)
 			return
-		} else if errors.Is(err, repository.ErrDuplicatedURL) {
+		} else if errors.Is(err, urls.ErrDuplicatedURL) {
 			ErrorResponse(w, err.Error(), http.StatusConflict, h.logger)
 			return
 		}
@@ -172,7 +172,7 @@ func (h *URLHandler) CreateURLHandler(w http.ResponseWriter, r *http.Request) {
 	shortURL, err := h.service.Create(*h.ctx, urlStr, h.responseDomain)
 	w.Header().Set("Content-Type", "text/plain")
 	if err != nil {
-		if errors.Is(err, repository.ErrOriginalURLAlreadyExists) {
+		if errors.Is(err, urls.ErrOriginalURLAlreadyExists) {
 			w.WriteHeader(http.StatusConflict)
 			w.Write([]byte(shortURL))
 			return
@@ -250,10 +250,10 @@ func (h *URLHandler) UpdateURLHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	updatedEntity, err := h.service.Update(*h.ctx, entityToUpdate)
 	if err != nil {
-		if errors.Is(err, repository.ErrURLNotFound) {
+		if errors.Is(err, urls.ErrURLNotFound) {
 			ErrorResponse(w, err.Error(), http.StatusBadRequest, h.logger)
 			return
-		} else if errors.Is(err, repository.ErrOriginalURLAlreadyExists) {
+		} else if errors.Is(err, urls.ErrOriginalURLAlreadyExists) {
 			responseData := model.URLCreateResponse{
 				Result: entityToUpdate.OriginalURL,
 			}
@@ -282,7 +282,7 @@ func (h *URLHandler) DeleteURLHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	if err != nil {
-		if errors.Is(err, repository.ErrURLNotFound) {
+		if errors.Is(err, urls.ErrURLNotFound) {
 			ErrorResponse(w, fmt.Sprintf("url with short url '%s' not found", shortURL), http.StatusBadRequest, h.logger)
 			return
 		}

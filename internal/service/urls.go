@@ -7,7 +7,7 @@ import (
 
 	"github.com/artni96/url-shortener/internal/config"
 	"github.com/artni96/url-shortener/internal/model"
-	"github.com/artni96/url-shortener/internal/repository"
+	urlrepo "github.com/artni96/url-shortener/internal/repository/urls"
 	"github.com/artni96/url-shortener/internal/utility"
 	"go.uber.org/zap"
 )
@@ -23,34 +23,55 @@ type URLServiceInterface interface {
 	Delete(ctx context.Context, urlID string) error
 }
 type URLService struct {
-	repo repository.URLRepositoryInterface
-	app  *config.App
+	dbRepository       urlrepo.DBURLRepositoryInterface
+	inMemoryRepository urlrepo.InMemoryURLRepositoryInterface
+	app                *config.App
 }
 
 func (s *URLService) GetList(ctx context.Context, responseDomain string) ([]model.URLEntity, error) {
-	result, err := s.repo.GetList(ctx)
+
+	var result []model.URLEntity
+	var err error
+
+	if s.dbRepository != nil {
+		result, err = s.dbRepository.GetList(ctx)
+	} else {
+		result, err = s.inMemoryRepository.GetList()
+	}
 	if err != nil {
 		return nil, fmt.Errorf("%w", err)
 	}
 
 	for i := range result {
 		result[i].ShortURL = fmt.Sprintf("%s/%s", responseDomain, result[i].ShortURL)
+
 	}
 
 	return result, nil
 }
 
 func (s *URLService) GetByShortURL(ctx context.Context, shortURL string) (string, error) {
-	originalURL, err := s.repo.GetByShortURL(ctx, shortURL)
+	var originalURL string
+	var err error
+
+	if s.dbRepository != nil {
+		originalURL, err = s.dbRepository.GetByShortURL(ctx, shortURL)
+	} else {
+		originalURL, err = s.inMemoryRepository.GetByShortURL(shortURL)
+	}
+
 	if err != nil {
 		return "", fmt.Errorf("%w", err)
 	}
+
 	return originalURL, nil
 }
 
 func (s *URLService) Create(ctx context.Context, originalURL string, responseDomain string) (string, error) {
 
 	for i := range 5 {
+		var entity model.URLEntity
+		var err error
 		shortURL, err := utility.GenerateShortURL(10)
 		if err != nil {
 			s.app.Logger.Info(
@@ -59,10 +80,18 @@ func (s *URLService) Create(ctx context.Context, originalURL string, responseDom
 			)
 			continue
 		}
-		entity, err := s.repo.Create(ctx, originalURL, shortURL)
+		inputEntity := model.URLEntity{
+			ShortURL:    shortURL,
+			OriginalURL: originalURL,
+		}
+		if s.dbRepository != nil {
+			entity, err = s.dbRepository.Create(ctx, inputEntity)
+		} else {
+			entity, err = s.inMemoryRepository.Create(inputEntity)
+		}
 
 		if err != nil {
-			if errors.Is(err, repository.ErrOriginalURLAlreadyExists) {
+			if errors.Is(err, urlrepo.ErrOriginalURLAlreadyExists) {
 
 				s.app.Logger.Info("original url already exists",
 					zap.String("originalURL", originalURL),
@@ -70,7 +99,7 @@ func (s *URLService) Create(ctx context.Context, originalURL string, responseDom
 
 				return fmt.Sprintf("%s/%s", responseDomain, entity.ShortURL), err
 			}
-			if errors.Is(err, repository.ErrShortURLAlreadyExists) {
+			if errors.Is(err, urlrepo.ErrShortURLAlreadyExists) {
 				s.app.Logger.Info(
 					"shortURL creation",
 					zap.Int("attempt №", i),
@@ -85,8 +114,8 @@ func (s *URLService) Create(ctx context.Context, originalURL string, responseDom
 			}
 		}
 
-		if s.app.Cfg.FileStoragePath != "" {
-			fileWriter, err := repository.NewWriter(s.app.Cfg.FileStoragePath)
+		if s.dbRepository == nil && s.app.Cfg.FileStoragePath != "" {
+			fileWriter, err := urlrepo.NewWriter(s.app.Cfg.FileStoragePath)
 			if err != nil {
 				s.app.Logger.Error("could not create file writer",
 					zap.String("path", s.app.Cfg.FileStoragePath),
@@ -114,7 +143,12 @@ func (s *URLService) BulkCreate(ctx context.Context, urls []model.URLBulkCreateR
 	// проверяем уникальность сгенерированного списка shortURL одним запросом
 	for !isURLListUnique {
 		generatedURLList, err := utility.BulkGenerateShortURL(len(urls), 10)
-		isURLListUnique, err = s.repo.IsURLListUnique(ctx, generatedURLList)
+		if s.dbRepository != nil {
+			isURLListUnique, err = s.dbRepository.IsURLListUnique(ctx, generatedURLList)
+		} else {
+			isURLListUnique, err = s.inMemoryRepository.IsURLListUnique(generatedURLList)
+		}
+		//isURLListUnique, err = s.repo.IsURLListUnique(ctx, generatedURLList)
 		if err != nil {
 			isURLListUnique = false
 		}
@@ -132,13 +166,20 @@ func (s *URLService) BulkCreate(ctx context.Context, urls []model.URLBulkCreateR
 		toCreateList = append(toCreateList, entity)
 	}
 
-	entities, err := s.repo.BulkCreate(ctx, toCreateList)
+	var entities []model.URLBulkCreate
+	var err error
+	if s.dbRepository != nil {
+		entities, err = s.dbRepository.BulkCreate(ctx, toCreateList)
+	} else {
+		entities, err = s.inMemoryRepository.BulkCreate(toCreateList)
+	}
+	//entities, err := s.repo.BulkCreate(ctx, toCreateList)
 	if err != nil {
 		return nil, fmt.Errorf("%w", err)
 	}
 
-	if s.app.Cfg.FileStoragePath != "" {
-		fileWriter, err := repository.NewWriter(s.app.Cfg.FileStoragePath)
+	if s.dbRepository == nil && s.app.Cfg.FileStoragePath != "" {
+		fileWriter, err := urlrepo.NewWriter(s.app.Cfg.FileStoragePath)
 		if err != nil {
 			s.app.Logger.Error("could not create file writer",
 				zap.String("path", s.app.Cfg.FileStoragePath),
@@ -174,13 +215,20 @@ func (s *URLService) BulkCreate(ctx context.Context, urls []model.URLBulkCreateR
 }
 
 func (s *URLService) Update(ctx context.Context, entity model.URLEntity) (string, error) {
-	updatedEntity, err := s.repo.Update(ctx, entity)
+	var updatedEntity model.URLEntity
+	var err error
+
+	if s.dbRepository != nil {
+		updatedEntity, err = s.dbRepository.Update(ctx, entity)
+	} else {
+		updatedEntity, err = s.inMemoryRepository.Update(entity)
+	}
 	if err != nil {
 		return "", fmt.Errorf("%w", err)
 	}
-	if s.app.Cfg.FileStoragePath != "" {
-		entitiesForFile, err := s.repo.GetList(ctx)
-		fileWriter, err := repository.NewWriter(s.app.Cfg.FileStoragePath)
+	if s.dbRepository == nil && s.app.Cfg.FileStoragePath != "" {
+		entitiesForFile, err := s.inMemoryRepository.GetList()
+		fileWriter, err := urlrepo.NewWriter(s.app.Cfg.FileStoragePath)
 		if err != nil {
 			s.app.Logger.Error("could not create file writer",
 				zap.String("path", s.app.Cfg.FileStoragePath),
@@ -199,14 +247,20 @@ func (s *URLService) Update(ctx context.Context, entity model.URLEntity) (string
 }
 
 func (s *URLService) Delete(ctx context.Context, shortURL string) error {
-	err := s.repo.Delete(ctx, shortURL)
+	var err error
+	if s.dbRepository != nil {
+		err = s.dbRepository.Delete(ctx, shortURL)
+	} else {
+		err = s.inMemoryRepository.Delete(shortURL)
+	}
+	//err := s.repo.Delete(ctx, shortURL)
 	if err != nil {
 		return fmt.Errorf("%w", err)
 	}
 
-	if s.app.Cfg.FileStoragePath != "" {
-		entitiesForFile, err := s.repo.GetList(ctx)
-		fileWriter, err := repository.NewWriter(s.app.Cfg.FileStoragePath)
+	if s.dbRepository == nil && s.app.Cfg.FileStoragePath != "" {
+		entitiesForFile, err := s.inMemoryRepository.GetList()
+		fileWriter, err := urlrepo.NewWriter(s.app.Cfg.FileStoragePath)
 		if err != nil {
 			s.app.Logger.Error("could not create file writer",
 				zap.String("path", s.app.Cfg.FileStoragePath),
@@ -224,8 +278,11 @@ func (s *URLService) Delete(ctx context.Context, shortURL string) error {
 	return nil
 }
 
-func NewURLService(repo repository.URLRepositoryInterface, app *config.App) *URLService {
+func NewURLService(dbRepository urlrepo.DBURLRepositoryInterface, inMemoryRepository urlrepo.InMemoryURLRepositoryInterface, app *config.App) *URLService {
+	//return &URLService{
+	//	repo: repo, app: app,
+	//}
 	return &URLService{
-		repo: repo, app: app,
+		dbRepository: dbRepository, inMemoryRepository: inMemoryRepository, app: app,
 	}
 }
