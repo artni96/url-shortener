@@ -15,3 +15,15 @@ func GenerateShortURL(length int) (string, error) {
 	resp := base64.URLEncoding.EncodeToString(bytes)[:length]
 	return resp, err
 }
+
+func BulkGenerateShortURL(amount int, length int) ([]string, error) {
+	var result []string
+	for range amount {
+		shortURL, err := GenerateShortURL(length)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, shortURL)
+	}
+	return result, nil
+}

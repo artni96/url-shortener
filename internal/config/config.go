@@ -3,22 +3,28 @@ package config
 import (
 	"flag"
 	"os"
+
+	"github.com/jmoiron/sqlx"
+	"go.uber.org/zap"
 )
 
 type Config struct {
 	ServerAddress   string `env:"SERVER_ADDRESS"`
-	ResponseURL     string `env:"BASE_URL"`
+	ResponseDomain  string `env:"BASE_URL"`
 	DebugLevel      string `env:"DEBUG_LEVEL"`
 	FileStoragePath string `env:"FILE_STORAGE_PATH"`
+	DatabaseDsn     string `env:"DATABASE_DSN"`
 }
 
 func ParseFlags() (*Config, error) {
 	fs := flag.NewFlagSet("fs", flag.ExitOnError)
 	conf := Config{}
+
 	fs.StringVar(&conf.ServerAddress, "a", "localhost:8080", "server address")
-	fs.StringVar(&conf.ResponseURL, "b", "http://localhost:8080", "response URL")
-	fs.StringVar(&conf.FileStoragePath, "f", "./data/local_storage.json", "file storage path")
+	fs.StringVar(&conf.ResponseDomain, "b", "http://localhost:8080", "response URL")
+	fs.StringVar(&conf.FileStoragePath, "f", "", "file storage path")
 	fs.StringVar(&conf.DebugLevel, "debug", "Info", "debug level")
+	fs.StringVar(&conf.DatabaseDsn, "d", "", "database dsn")
 
 	err := fs.Parse(os.Args[1:])
 	if err != nil {
@@ -32,7 +38,7 @@ func ParseFlags() (*Config, error) {
 
 	envBaseURL, ok := os.LookupEnv("BASE_URL")
 	if ok {
-		conf.ResponseURL = envBaseURL
+		conf.ResponseDomain = envBaseURL
 	}
 
 	envDebugLevel, ok := os.LookupEnv("DEBUG_LEVEL")
@@ -44,6 +50,16 @@ func ParseFlags() (*Config, error) {
 	if ok {
 		conf.FileStoragePath = envFileStorePath
 	}
+	envDatabaseDsn, ok := os.LookupEnv("DATABASE_DSN")
+	if ok {
+		conf.DatabaseDsn = envDatabaseDsn
+	}
 
 	return &conf, nil
+}
+
+type App struct {
+	DB     *sqlx.DB
+	Cfg    *Config
+	Logger *zap.Logger
 }
