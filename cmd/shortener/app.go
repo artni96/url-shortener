@@ -7,9 +7,11 @@ import (
 
 	"github.com/artni96/url-shortener/internal/config"
 	"github.com/artni96/url-shortener/internal/config/db"
+	"github.com/artni96/url-shortener/internal/handler/auth"
 	"github.com/artni96/url-shortener/internal/handler/healthcheck"
 	"github.com/artni96/url-shortener/internal/handler/urls"
 	"github.com/artni96/url-shortener/internal/logger"
+	authrepo "github.com/artni96/url-shortener/internal/repository/auth"
 	urlrepo "github.com/artni96/url-shortener/internal/repository/urls"
 	"github.com/artni96/url-shortener/internal/service"
 	"github.com/go-chi/chi/v5"
@@ -31,6 +33,10 @@ func run(cfg *config.Config) error {
 	if err != nil {
 		app.Logger.Info("failed to connect to database", zap.Error(err))
 	}
+
+	authDBRepository := authrepo.NewAuthDBRepository(DBCon, appLogger)
+	authService := service.NewAuthService(authDBRepository, app)
+	authRouter := auth.AuthRouter(&ctx, app, *authService)
 
 	var urlDBRepository *urlrepo.DBURLRepository
 	var urlInMemoryRepository *urlrepo.InMemoryURLRepository
@@ -59,6 +65,7 @@ func run(cfg *config.Config) error {
 	healthRouter := healthcheck.HealthCheckRouter(&ctx, app)
 	mainRouter.Mount("/", urlRouter)
 	mainRouter.Mount("/ping", healthRouter)
+	mainRouter.Mount("/api/auth", authRouter)
 
 	appLogger.Info("Starting server",
 		zap.String("server address", app.Cfg.ServerAddress),
