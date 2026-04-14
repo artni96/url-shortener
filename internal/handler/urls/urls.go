@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/artni96/url-shortener/internal/config"
+	"github.com/artni96/url-shortener/internal/handler"
 	"github.com/artni96/url-shortener/internal/handler/middlewares"
 	"github.com/artni96/url-shortener/internal/logger"
 	"github.com/artni96/url-shortener/internal/model"
@@ -50,17 +51,17 @@ func (h *URLHandler) ShortenURLHandler(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	if err != nil {
-		ErrorResponse(w, "invalid request - empty body", http.StatusBadRequest, h.logger)
+		handler.ErrorResponse(w, "invalid request - empty body", http.StatusBadRequest, h.logger)
 		return
 	}
 
 	if err = json.Unmarshal(buf.Bytes(), &body); err != nil {
-		ErrorResponse(w, "could not unmarshal request body", http.StatusBadRequest, h.logger)
+		handler.ErrorResponse(w, "could not unmarshal request body", http.StatusBadRequest, h.logger)
 		return
 	}
 
 	if !isURLCorrect(body.OriginalURL) {
-		ErrorResponse(w, fmt.Sprintf("url '%s' is invalid", body.OriginalURL), http.StatusBadRequest, h.logger)
+		handler.ErrorResponse(w, fmt.Sprintf("url '%s' is invalid", body.OriginalURL), http.StatusBadRequest, h.logger)
 		return
 	}
 
@@ -70,19 +71,19 @@ func (h *URLHandler) ShortenURLHandler(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		if errors.Is(err, service.ErrFailedToCreated) {
-			ErrorResponse(w, err.Error(), http.StatusInternalServerError, h.logger)
+			handler.ErrorResponse(w, err.Error(), http.StatusInternalServerError, h.logger)
 			return
 		} else if errors.Is(err, urls.ErrOriginalURLAlreadyExists) {
 			w.WriteHeader(http.StatusConflict)
 			resp, err := json.Marshal(responseData)
 			if err != nil {
-				ErrorResponse(w, fmt.Sprintf("Could not create short URL for %s", body.OriginalURL), http.StatusInternalServerError, h.logger)
+				handler.ErrorResponse(w, fmt.Sprintf("Could not create short URL for %s", body.OriginalURL), http.StatusInternalServerError, h.logger)
 				return
 			}
 			w.Write(resp)
 			return
 		} else {
-			ErrorResponse(w, fmt.Sprintf("Could not create short URL for %s", body.OriginalURL), http.StatusInternalServerError, h.logger)
+			handler.ErrorResponse(w, fmt.Sprintf("Could not create short URL for %s", body.OriginalURL), http.StatusInternalServerError, h.logger)
 			return
 		}
 	}
@@ -90,7 +91,7 @@ func (h *URLHandler) ShortenURLHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 	resp, err := json.Marshal(responseData)
 	if err != nil {
-		ErrorResponse(w, fmt.Sprintf("Could not create short URL for %s", body.OriginalURL), http.StatusInternalServerError, h.logger)
+		handler.ErrorResponse(w, fmt.Sprintf("Could not create short URL for %s", body.OriginalURL), http.StatusInternalServerError, h.logger)
 		return
 	}
 	w.Write(resp)
@@ -105,19 +106,19 @@ func (h *URLHandler) BulkCreateURLHandler(w http.ResponseWriter, r *http.Request
 	defer r.Body.Close()
 
 	if err != nil {
-		ErrorResponse(w, "invalid request - empty body", http.StatusBadRequest, h.logger)
+		handler.ErrorResponse(w, "invalid request - empty body", http.StatusBadRequest, h.logger)
 		return
 	}
 
 	if err = json.Unmarshal(buf.Bytes(), &body); err != nil {
-		ErrorResponse(w, "could not unmarshal request body", http.StatusBadRequest, h.logger)
+		handler.ErrorResponse(w, "could not unmarshal request body", http.StatusBadRequest, h.logger)
 		return
 	}
 
 	// валидация входных данных
 	for _, url := range body {
 		if url.OriginalURL == "" || url.CorrelationID == "" {
-			ErrorResponse(w, "invalid body request", http.StatusBadRequest, h.logger)
+			handler.ErrorResponse(w, "invalid body request", http.StatusBadRequest, h.logger)
 			return
 		}
 	}
@@ -125,20 +126,20 @@ func (h *URLHandler) BulkCreateURLHandler(w http.ResponseWriter, r *http.Request
 	responseData, err := h.service.BulkCreate(*h.ctx, body, h.responseDomain)
 	if err != nil {
 		if errors.Is(err, urls.ErrShortURLAlreadyExists) {
-			ErrorResponse(w, err.Error(), http.StatusBadRequest, h.logger)
+			handler.ErrorResponse(w, err.Error(), http.StatusBadRequest, h.logger)
 			return
 		} else if errors.Is(err, urls.ErrDuplicatedURL) {
-			ErrorResponse(w, err.Error(), http.StatusConflict, h.logger)
+			handler.ErrorResponse(w, err.Error(), http.StatusConflict, h.logger)
 			return
 		}
-		ErrorResponse(w, "could not bulk create short URL", http.StatusInternalServerError, h.logger)
+		handler.ErrorResponse(w, "could not bulk create short URL", http.StatusInternalServerError, h.logger)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	resp, err := json.Marshal(responseData)
 	if err != nil {
-		ErrorResponse(w, "could not marshal request body", http.StatusInternalServerError, h.logger)
+		handler.ErrorResponse(w, "could not marshal request body", http.StatusInternalServerError, h.logger)
 		return
 	}
 	w.Write(resp)
@@ -218,7 +219,7 @@ func (h *URLHandler) GetListHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	resp, err := json.Marshal(urlList)
 	if err != nil {
-		ErrorResponse(w, "could not marshal request body", http.StatusInternalServerError, h.logger)
+		handler.ErrorResponse(w, "could not marshal request body", http.StatusInternalServerError, h.logger)
 		return
 	}
 	w.Write(resp)
@@ -234,12 +235,12 @@ func (h *URLHandler) UpdateURLHandler(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	if err != nil {
-		ErrorResponse(w, "invalid request - empty body", http.StatusBadRequest, h.logger)
+		handler.ErrorResponse(w, "invalid request - empty body", http.StatusBadRequest, h.logger)
 		return
 	}
 
 	if err = json.Unmarshal(buf.Bytes(), &body); err != nil {
-		ErrorResponse(w, "could not unmarshal request body", http.StatusBadRequest, h.logger)
+		handler.ErrorResponse(w, "could not unmarshal request body", http.StatusBadRequest, h.logger)
 		return
 	}
 
@@ -251,7 +252,7 @@ func (h *URLHandler) UpdateURLHandler(w http.ResponseWriter, r *http.Request) {
 	updatedEntity, err := h.service.Update(*h.ctx, entityToUpdate)
 	if err != nil {
 		if errors.Is(err, urls.ErrURLNotFound) {
-			ErrorResponse(w, err.Error(), http.StatusBadRequest, h.logger)
+			handler.ErrorResponse(w, err.Error(), http.StatusBadRequest, h.logger)
 			return
 		} else if errors.Is(err, urls.ErrOriginalURLAlreadyExists) {
 			responseData := model.URLCreateResponse{
@@ -260,7 +261,7 @@ func (h *URLHandler) UpdateURLHandler(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusConflict)
 			resp, err := json.Marshal(responseData)
 			if err != nil {
-				ErrorResponse(w, fmt.Sprintf("Could not create short URL for %s", body.OriginalURL), http.StatusInternalServerError, h.logger)
+				handler.ErrorResponse(w, fmt.Sprintf("Could not create short URL for %s", body.OriginalURL), http.StatusInternalServerError, h.logger)
 				return
 			}
 			w.Write(resp)
@@ -270,7 +271,7 @@ func (h *URLHandler) UpdateURLHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	resp, err := json.Marshal(model.URLCreateRequest{OriginalURL: updatedEntity})
 	if err != nil {
-		ErrorResponse(w, "could not marshal request body", http.StatusInternalServerError, h.logger)
+		handler.ErrorResponse(w, "could not marshal request body", http.StatusInternalServerError, h.logger)
 		return
 	}
 	w.Write(resp)
@@ -283,7 +284,7 @@ func (h *URLHandler) DeleteURLHandler(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		if errors.Is(err, urls.ErrURLNotFound) {
-			ErrorResponse(w, fmt.Sprintf("url with short url '%s' not found", shortURL), http.StatusBadRequest, h.logger)
+			handler.ErrorResponse(w, fmt.Sprintf("url with short url '%s' not found", shortURL), http.StatusBadRequest, h.logger)
 			return
 		}
 		w.WriteHeader(http.StatusBadRequest)

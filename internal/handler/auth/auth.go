@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/artni96/url-shortener/internal/config"
+	"github.com/artni96/url-shortener/internal/handler"
 	"github.com/artni96/url-shortener/internal/handler/middlewares"
 	"github.com/artni96/url-shortener/internal/logger"
 	"github.com/artni96/url-shortener/internal/model"
@@ -37,20 +39,21 @@ func (h *AuthHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	_, err := buf.ReadFrom(r.Body)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+		handler.ErrorResponse(w, err.Error(), http.StatusBadRequest, h.logger)
 		return
 	}
 
 	if err = json.Unmarshal(buf.Bytes(), &body); err != nil {
+		handler.ErrorResponse(w, err.Error(), http.StatusBadRequest, h.logger)
+		return
 	}
 
-	result, err := h.service.Create(r.Context(), body)
+	err = h.service.Create(r.Context(), body)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+		handler.ErrorResponse(w, err.Error(), http.StatusBadRequest, h.logger)
 		return
 	}
 	w.WriteHeader(http.StatusCreated)
-	w.Write([]byte(fmt.Sprintf("%v", result)))
 	return
 }
 
@@ -60,22 +63,27 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	_, err := buf.ReadFrom(r.Body)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+		handler.ErrorResponse(w, err.Error(), http.StatusBadRequest, h.logger)
 		return
 	}
 
 	if err = json.Unmarshal(buf.Bytes(), &body); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+		handler.ErrorResponse(w, err.Error(), http.StatusBadRequest, h.logger)
 		return
 	}
 
-	result, err := h.service.Login(r.Context(), body)
+	token, err := h.service.Login(r.Context(), body)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+		handler.ErrorResponse(w, err.Error(), http.StatusBadRequest, h.logger)
 		return
 	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     "Authorization",
+		Value:    fmt.Sprintf("Bearer %s", token),
+		Expires:  time.Now().Add(service.TOKEN_EXP),
+		HttpOnly: true,
+	})
 	w.WriteHeader(http.StatusCreated)
-	w.Write([]byte(fmt.Sprintf("%v", result)))
 	return
 }
 
