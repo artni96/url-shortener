@@ -25,7 +25,7 @@ type DBAuthRepository struct {
 func (repo *DBAuthRepository) Create(ctx context.Context, user model.UserCreate) (model.UserWithHashedPassword, error) {
 	responseEntity := model.UserWithHashedPassword{}
 
-	insertQuery := "INSERT INTO users (username, password) VALUES ($1, $2)"
+	insertQuery := "INSERT INTO authors (username, password) VALUES ($1, $2)"
 
 	result, err := repo.db.ExecContext(ctx, insertQuery, user.Username, user.HashedPassword)
 	var uniqueConstrErr *pgconn.PgError
@@ -49,7 +49,7 @@ func (repo *DBAuthRepository) Create(ctx context.Context, user model.UserCreate)
 }
 
 func (repo *DBAuthRepository) GetUserHashedPassword(ctx context.Context, username string) (model.UserWithHashedPassword, error) {
-	selectQuery := "SELECT id, username, password FROM users WHERE username = $1"
+	selectQuery := "SELECT id, username, password FROM authors WHERE username = $1"
 	userResponse := model.UserWithHashedPassword{}
 	err := repo.db.GetContext(ctx, &userResponse, selectQuery, username)
 	if err != nil {
