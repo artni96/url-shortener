@@ -146,11 +146,7 @@ func (repo *DBURLRepository) Update(ctx context.Context, entity model.URLEntity)
 		if errors.As(err, &uniqueConstrErr) {
 			selectQuery := "SELECT original_url, short_url FROM urls WHERE original_url = $1"
 			repo.db.GetContext(ctx, &entity, selectQuery, entity.OriginalURL)
-			return entity, fmt.Errorf("%w: %s", ErrOriginalURLAlreadyExists, model.URLEntity{
-				OriginalURL: entity.OriginalURL,
-				ShortURL:    entity.ShortURL,
-			},
-			)
+			return entity, fmt.Errorf("%w: original url: %s, short url: %s", ErrOriginalURLAlreadyExists, entity.OriginalURL, entity.ShortURL)
 		}
 		return updatedEntity, fmt.Errorf("%w", fmt.Errorf("failed to update url entity: %w", err))
 	}
