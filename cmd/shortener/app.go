@@ -34,9 +34,9 @@ func run(cfg *config.Config) error {
 		app.Logger.Info("failed to connect to database", zap.Error(err))
 	}
 
-	authDBRepository := authrepo.NewAuthDBRepository(DBCon, appLogger)
-	authService := service.NewAuthService(authDBRepository, app)
-	authRouter := auth.AuthRouter(&ctx, app, *authService)
+	var authDBRepository *authrepo.DBAuthRepository
+	var authInMemoryRepository *authrepo.InMemoryAuthRepository
+	var authService *service.AuthService
 
 	var urlDBRepository *urlrepo.DBURLRepository
 	var urlInMemoryRepository *urlrepo.InMemoryURLRepository
@@ -50,6 +50,13 @@ func run(cfg *config.Config) error {
 			return fmt.Errorf("url db repository is not initialized: %w", err)
 		}
 		urlService = service.NewURLService(urlDBRepository, nil, app)
+
+		authDBRepository, err = authrepo.NewAuthDBRepository(app)
+		if err != nil {
+			app.Logger.Error("failed to initialize auth db repository", zap.Error(err))
+			return fmt.Errorf("auth db repository is not initialized: %w", err)
+		}
+		authService = service.NewAuthService(authDBRepository, nil, app)
 		defer DBCon.Close()
 	} else {
 		urlInMemoryRepository, err = urlrepo.NewInMemoryURLRepository(app)
@@ -58,10 +65,14 @@ func run(cfg *config.Config) error {
 			return fmt.Errorf("url in-memory repository is not initialized: %w", err)
 		}
 		urlService = service.NewURLService(nil, urlInMemoryRepository, app)
+
+		authInMemoryRepository, err = authrepo.NewInMemoryAuthRepository(app)
+		authService = service.NewAuthService(nil, authInMemoryRepository, app)
 	}
 
 	mainRouter := chi.NewRouter()
 	urlRouter := urls.URLRouter(&ctx, app, urlService)
+	authRouter := auth.AuthRouter(&ctx, app, *authService)
 	healthRouter := healthcheck.HealthCheckRouter(&ctx, app)
 	mainRouter.Mount("/", urlRouter)
 	mainRouter.Mount("/ping", healthRouter)

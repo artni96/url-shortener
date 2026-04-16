@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/artni96/url-shortener/internal/config"
 	"github.com/artni96/url-shortener/internal/model"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jmoiron/sqlx"
@@ -12,8 +13,8 @@ import (
 )
 
 type DBAuthRepositoryInterface interface {
-	Create(ctx context.Context, user model.UserCreate) (string, error)
-	GetUserHashedPassword(ctx context.Context, user model.UserLogin) (model.UserWithHashedPassword, error)
+	Create(ctx context.Context, user model.UserCreate) (model.UserWithHashedPassword, error)
+	GetUserHashedPassword(ctx context.Context, username string) (model.UserWithHashedPassword, error)
 }
 
 type DBAuthRepository struct {
@@ -21,27 +22,36 @@ type DBAuthRepository struct {
 	logger *zap.Logger
 }
 
-func (repo *DBAuthRepository) Create(ctx context.Context, user model.UserCreate) (string, error) {
+func (repo *DBAuthRepository) Create(ctx context.Context, user model.UserCreate) (model.UserWithHashedPassword, error) {
+	responseEntity := model.UserWithHashedPassword{}
+
 	insertQuery := "INSERT INTO users (username, password) VALUES ($1, $2)"
 
 	result, err := repo.db.ExecContext(ctx, insertQuery, user.Username, user.HashedPassword)
 	var uniqueConstrErr *pgconn.PgError
 	if err != nil {
 		if errors.As(err, &uniqueConstrErr) {
-			return "", ErrUserAlreadyExists
+			return responseEntity, ErrUserAlreadyExists
 		}
-		return "", fmt.Errorf("failed to create new user: %w", err)
+		return responseEntity, fmt.Errorf("failed to create new user: %w", err)
 	}
 	if result == nil {
-		return "", ErrUserNotCreated
+		return responseEntity, ErrUserNotCreated
 	}
-	return fmt.Sprintf("user %s successfully created", user.Username), nil
+	entityID, err := result.LastInsertId()
+	if err != nil {
+		return responseEntity, fmt.Errorf("failed to get last insert ID: %w", err)
+	}
+	responseEntity.ID = int(entityID)
+	responseEntity.Username = user.Username
+	responseEntity.Password = user.HashedPassword
+	return responseEntity, nil
 }
 
-func (repo *DBAuthRepository) GetUserHashedPassword(ctx context.Context, user model.UserLogin) (model.UserWithHashedPassword, error) {
+func (repo *DBAuthRepository) GetUserHashedPassword(ctx context.Context, username string) (model.UserWithHashedPassword, error) {
 	selectQuery := "SELECT id, username, password FROM users WHERE username = $1"
 	userResponse := model.UserWithHashedPassword{}
-	err := repo.db.GetContext(ctx, &userResponse, selectQuery, user.Username)
+	err := repo.db.GetContext(ctx, &userResponse, selectQuery, username)
 	if err != nil {
 		return userResponse, fmt.Errorf("failed to get user hashed password: %w", err)
 	}
@@ -49,12 +59,11 @@ func (repo *DBAuthRepository) GetUserHashedPassword(ctx context.Context, user mo
 		return userResponse, ErrUserNotFound
 	}
 	return userResponse, nil
-
 }
 
-func NewAuthDBRepository(db *sqlx.DB, logger *zap.Logger) *DBAuthRepository {
+func NewAuthDBRepository(app *config.App) (*DBAuthRepository, error) {
 	return &DBAuthRepository{
-		db:     db,
-		logger: logger,
-	}
+		db:     app.DB,
+		logger: app.Logger,
+	}, nil
 }

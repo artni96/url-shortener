@@ -15,9 +15,9 @@ import (
 var ErrFailedToCreated = errors.New("could not create ShortURL")
 
 type URLServiceInterface interface {
-	GetList(ctx context.Context, responseDomain string) ([]model.URLEntity, error)
+	GetList(ctx context.Context, responseDomain string, createdBy int) ([]model.URLListEntity, error)
 	GetByShortURL(ctx context.Context, urlID string) (string, error)
-	Create(ctx context.Context, urlStr string, responseDomain string) (string, error)
+	Create(ctx context.Context, entity model.URLCreateRequest, responseDomain string) (string, error)
 	BulkCreate(ctx context.Context, urls []model.URLBulkCreateRequest, responseDomain string) ([]model.URLBulkCreateResponse, error)
 	Update(ctx context.Context, entity model.URLEntity) (string, error)
 	Delete(ctx context.Context, urlID string) error
@@ -28,26 +28,29 @@ type URLService struct {
 	app                *config.App
 }
 
-func (s *URLService) GetList(ctx context.Context, responseDomain string) ([]model.URLEntity, error) {
+func (s *URLService) GetList(ctx context.Context, responseDomain string, createdBy int) ([]model.URLListEntity, error) {
 
-	var result []model.URLEntity
+	var entities []model.URLEntity
 	var err error
 
 	if s.dbRepository != nil {
-		result, err = s.dbRepository.GetList(ctx)
+		entities, err = s.dbRepository.GetList(ctx, createdBy)
 	} else {
-		result, err = s.inMemoryRepository.GetList()
+		entities, err = s.inMemoryRepository.GetList(createdBy)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("%w", err)
 	}
-
-	for i := range result {
-		result[i].ShortURL = fmt.Sprintf("%s/%s", responseDomain, result[i].ShortURL)
+	var response []model.URLListEntity
+	for _, data := range entities {
+		response = append(response, model.URLListEntity{
+			OriginalURL: data.OriginalURL,
+			ShortURL:    data.ShortURL,
+		})
 
 	}
 
-	return result, nil
+	return response, nil
 }
 
 func (s *URLService) GetByShortURL(ctx context.Context, shortURL string) (string, error) {
@@ -67,10 +70,10 @@ func (s *URLService) GetByShortURL(ctx context.Context, shortURL string) (string
 	return originalURL, nil
 }
 
-func (s *URLService) Create(ctx context.Context, originalURL string, responseDomain string) (string, error) {
+func (s *URLService) Create(ctx context.Context, requestEntity model.URLCreateRequest, responseDomain string) (string, error) {
 
 	for i := range 5 {
-		var entity model.URLEntity
+		var responseEntity model.URLEntity
 		var err error
 		shortURL, err := utility.GenerateShortURL(10)
 		if err != nil {
@@ -80,24 +83,26 @@ func (s *URLService) Create(ctx context.Context, originalURL string, responseDom
 			)
 			continue
 		}
-		inputEntity := model.URLEntity{
+		inputEntity := model.URLCreate{
 			ShortURL:    shortURL,
-			OriginalURL: originalURL,
+			OriginalURL: requestEntity.OriginalURL,
+			CreatedBy:   requestEntity.CreatedBy,
 		}
 		if s.dbRepository != nil {
-			entity, err = s.dbRepository.Create(ctx, inputEntity)
+
+			responseEntity, err = s.dbRepository.Create(ctx, inputEntity)
 		} else {
-			entity, err = s.inMemoryRepository.Create(inputEntity)
+			responseEntity, err = s.inMemoryRepository.Create(inputEntity)
 		}
 
 		if err != nil {
 			if errors.Is(err, urlrepo.ErrOriginalURLAlreadyExists) {
 
 				s.app.Logger.Info("original url already exists",
-					zap.String("originalURL", originalURL),
+					zap.String("originalURL", requestEntity.OriginalURL),
 				)
 
-				return fmt.Sprintf("%s/%s", responseDomain, entity.ShortURL), err
+				return fmt.Sprintf("%s/%s", responseDomain, responseEntity.ShortURL), err
 			}
 			if errors.Is(err, urlrepo.ErrShortURLAlreadyExists) {
 				s.app.Logger.Info(
@@ -108,7 +113,7 @@ func (s *URLService) Create(ctx context.Context, originalURL string, responseDom
 			} else {
 				s.app.Logger.Error(
 					"could not manage to create a short url for ",
-					zap.String("url", originalURL),
+					zap.String("url", requestEntity.OriginalURL),
 				)
 				return "", fmt.Errorf("%w", err)
 			}
@@ -125,15 +130,15 @@ func (s *URLService) Create(ctx context.Context, originalURL string, responseDom
 			}
 			defer fileWriter.Close()
 
-			err = fileWriter.WriteEntity(&entity)
+			err = fileWriter.WriteEntity(&responseEntity)
 			if err != nil {
 				return "", fmt.Errorf("%w", err)
 			}
 		}
 
-		return fmt.Sprintf("%s/%s", responseDomain, entity.ShortURL), nil
+		return fmt.Sprintf("%s/%s", responseDomain, responseEntity.ShortURL), nil
 	}
-	return "", fmt.Errorf("%w %s", ErrFailedToCreated, originalURL)
+	return "", fmt.Errorf("%w %s", ErrFailedToCreated, requestEntity.OriginalURL)
 }
 
 func (s *URLService) BulkCreate(ctx context.Context, urls []model.URLBulkCreateRequest, responseDomain string) ([]model.URLBulkCreateResponse, error) {
@@ -162,6 +167,7 @@ func (s *URLService) BulkCreate(ctx context.Context, urls []model.URLBulkCreateR
 			CorrelationID: url.CorrelationID,
 			ShortURL:      urlList[i],
 			OriginalURL:   url.OriginalURL,
+			CreatedBy:     url.CreatedBy,
 		}
 		toCreateList = append(toCreateList, entity)
 	}
@@ -227,7 +233,7 @@ func (s *URLService) Update(ctx context.Context, entity model.URLEntity) (string
 		return "", fmt.Errorf("%w", err)
 	}
 	if s.dbRepository == nil && s.app.Cfg.FileStoragePath != "" {
-		entitiesForFile, err := s.inMemoryRepository.GetList()
+		entitiesForFile, err := s.inMemoryRepository.GetList(-1)
 		fileWriter, err := urlrepo.NewWriter(s.app.Cfg.FileStoragePath)
 		if err != nil {
 			s.app.Logger.Error("could not create file writer",
@@ -259,7 +265,7 @@ func (s *URLService) Delete(ctx context.Context, shortURL string) error {
 	}
 
 	if s.dbRepository == nil && s.app.Cfg.FileStoragePath != "" {
-		entitiesForFile, err := s.inMemoryRepository.GetList()
+		entitiesForFile, err := s.inMemoryRepository.GetList(-1)
 		fileWriter, err := urlrepo.NewWriter(s.app.Cfg.FileStoragePath)
 		if err != nil {
 			s.app.Logger.Error("could not create file writer",

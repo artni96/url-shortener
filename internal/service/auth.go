@@ -13,6 +13,7 @@ import (
 	"github.com/artni96/url-shortener/internal/config"
 	"github.com/artni96/url-shortener/internal/model"
 	"github.com/artni96/url-shortener/internal/repository/auth"
+	//urlrepo "github.com/artni96/url-shortener/internal/repository/urls"
 	"github.com/golang-jwt/jwt/v4"
 	"go.uber.org/zap"
 )
@@ -21,12 +22,13 @@ var ErrWrongUsernameOrPassword = errors.New("wrong username or password")
 var ErrWrongPassword = errors.New("passwords do not match")
 
 type AuthServiceInterface interface {
-	Create(ctx context.Context, user model.UserCreateRequest) error
+	Create(ctx context.Context, user model.UserCreateRequest) (model.UserWithHashedPassword, error)
 	Login(ctx context.Context, user model.UserLogin) (string, error)
 }
 type AuthService struct {
-	dbRepository auth.DBAuthRepositoryInterface
-	app          *config.App
+	dbRepository       auth.DBAuthRepositoryInterface
+	inMemoryRepository auth.InMemoryAuthRepositoryInterface
+	app                *config.App
 }
 
 func (s *AuthService) Create(ctx context.Context, user model.UserCreateRequest) error {
@@ -43,11 +45,31 @@ func (s *AuthService) Create(ctx context.Context, user model.UserCreateRequest) 
 		Username:       user.Username,
 		HashedPassword: encryptedPassword,
 	}
-
-	_, err = s.dbRepository.Create(ctx, entityToCreate)
+	var entity model.UserWithHashedPassword
+	if s.dbRepository != nil {
+		entity, err = s.dbRepository.Create(ctx, entityToCreate)
+	} else {
+		entity, err = s.inMemoryRepository.Create(entityToCreate)
+	}
 	if err != nil {
 		s.app.Logger.Info("failed to create user", zap.Error(err), zap.String("username", user.Username))
 		return err
+	}
+	if s.dbRepository == nil && s.app.Cfg.FileStoragePath != "" {
+		fileWriter, err := auth.NewWriter(s.app.Cfg.FileStoragePath)
+		if err != nil {
+			s.app.Logger.Error("could not create file writer",
+				zap.String("path", s.app.Cfg.FileStoragePath),
+				zap.String("error message", err.Error()),
+			)
+			return err
+		}
+		defer fileWriter.Close()
+
+		err = fileWriter.WriteEntity(&entity)
+		if err != nil {
+			return fmt.Errorf("could not write entity to file: %w", err)
+		}
 	}
 	s.app.Logger.Info("user successfully created", zap.String("user", entityToCreate.Username))
 	return nil
@@ -59,7 +81,14 @@ func (s *AuthService) Login(ctx context.Context, user model.UserLogin) (string, 
 		s.app.Logger.Info("failed to encrypt password", zap.Error(err))
 		return "", err
 	}
-	dbUserEntity, err := s.dbRepository.GetUserHashedPassword(ctx, user)
+
+	dbUserEntity := model.UserWithHashedPassword{}
+	if s.dbRepository != nil {
+		dbUserEntity, err = s.dbRepository.GetUserHashedPassword(ctx, user.Username)
+	} else {
+		dbUserEntity, err = s.inMemoryRepository.GetUserHashedPassword(user.Username)
+	}
+
 	if err != nil {
 		s.app.Logger.Info("failed to get user hashed password", zap.Error(err))
 		return "", err
@@ -84,7 +113,7 @@ type Claims struct {
 }
 
 const (
-	TOKEN_EXP  = time.Hour * 3
+	TOKEN_EXP  = time.Minute * 1
 	SECRET_KEY = "dontshareme"
 )
 
@@ -118,9 +147,28 @@ func (s *AuthService) BuildJWTString(userID int) (string, error) {
 	return tokenString, nil
 }
 
-func NewAuthService(dbRepository auth.DBAuthRepositoryInterface, app *config.App) *AuthService {
+func GetUserID(tokenString string) int {
+	claims := &Claims{}
+	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return []byte(SECRET_KEY), nil
+	})
+	if err != nil {
+		return -1
+	}
+
+	if !token.Valid {
+		return -1
+	}
+	return claims.UserID
+}
+
+func NewAuthService(dbRepository auth.DBAuthRepositoryInterface, inMemoryRepository auth.InMemoryAuthRepositoryInterface, app *config.App) *AuthService {
 	return &AuthService{
-		dbRepository: dbRepository,
-		app:          app,
+		dbRepository:       dbRepository,
+		inMemoryRepository: inMemoryRepository,
+		app:                app,
 	}
 }

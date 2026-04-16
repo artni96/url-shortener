@@ -79,9 +79,10 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 	http.SetCookie(w, &http.Cookie{
 		Name:     "Authorization",
-		Value:    fmt.Sprintf("Bearer %s", token),
+		Value:    token,
 		Expires:  time.Now().Add(service.TOKEN_EXP),
 		HttpOnly: true,
+		Path:     "/",
 	})
 	w.WriteHeader(http.StatusCreated)
 	return

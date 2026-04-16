@@ -43,7 +43,6 @@ func NewURLHandler(ctx *context.Context, app *config.App, urlService service.URL
 
 func (h *URLHandler) ShortenURLHandler(w http.ResponseWriter, r *http.Request) {
 	var responseData model.URLCreateResponse
-
 	var body model.URLCreateRequest
 	var buf bytes.Buffer
 
@@ -65,7 +64,17 @@ func (h *URLHandler) ShortenURLHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	shortURL, err := h.service.Create(*h.ctx, body.OriginalURL, h.responseDomain)
+	userToken, err := r.Cookie("Authorization")
+	if err == nil {
+		userID := service.GetUserID(userToken.Value)
+		if userID == -1 {
+			handler.ErrorResponse(w, "invalid user", http.StatusUnauthorized, h.logger)
+			return
+		}
+		body.CreatedBy = userID
+	}
+
+	shortURL, err := h.service.Create(*h.ctx, body, h.responseDomain)
 	responseData.Result = shortURL
 	w.Header().Set("Content-Type", "application/json")
 
@@ -115,12 +124,24 @@ func (h *URLHandler) BulkCreateURLHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	userID := -1
+	userToken, err := r.Cookie("Authorization")
+	if err == nil {
+		userID = service.GetUserID(userToken.Value)
+		if userID == -1 {
+			handler.ErrorResponse(w, "invalid user", http.StatusUnauthorized, h.logger)
+			return
+		}
+
+	}
+
 	// валидация входных данных
-	for _, url := range body {
+	for i, url := range body {
 		if url.OriginalURL == "" || url.CorrelationID == "" {
 			handler.ErrorResponse(w, "invalid body request", http.StatusBadRequest, h.logger)
 			return
 		}
+		body[i].CreatedBy = userID
 	}
 
 	responseData, err := h.service.BulkCreate(*h.ctx, body, h.responseDomain)
@@ -169,8 +190,20 @@ func (h *URLHandler) CreateURLHandler(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("Incorrect request body"))
 		return
 	}
+	entity := model.URLCreateRequest{
+		OriginalURL: urlStr,
+	}
+	userToken, err := r.Cookie("Authorization")
+	if err == nil {
+		userID := service.GetUserID(userToken.Value)
+		if userID == -1 {
+			handler.ErrorResponse(w, "invalid user", http.StatusUnauthorized, h.logger)
+			return
+		}
+		entity.CreatedBy = userID
+	}
 
-	shortURL, err := h.service.Create(*h.ctx, urlStr, h.responseDomain)
+	shortURL, err := h.service.Create(*h.ctx, entity, h.responseDomain)
 	w.Header().Set("Content-Type", "text/plain")
 	if err != nil {
 		if errors.Is(err, urls.ErrOriginalURLAlreadyExists) {
@@ -209,7 +242,18 @@ func (h *URLHandler) GetURLHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *URLHandler) GetListHandler(w http.ResponseWriter, r *http.Request) {
-	urlList, err := h.service.GetList(*h.ctx, h.responseDomain)
+	userID := -1
+	userToken, err := r.Cookie("Authorization")
+	if err == nil {
+		tokenUserID := service.GetUserID(userToken.Value)
+		if tokenUserID == -1 {
+			handler.ErrorResponse(w, "invalid user", http.StatusUnauthorized, h.logger)
+			return
+		}
+		userID = tokenUserID
+	}
+
+	urlList, err := h.service.GetList(*h.ctx, h.responseDomain, userID)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("Could not get the list of urls"))
