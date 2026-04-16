@@ -73,6 +73,9 @@ func (h *URLHandler) ShortenURLHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		body.CreatedBy = userID
 	}
+	if body.CreatedBy == 0 {
+		body.CreatedBy = -1
+	}
 
 	shortURL, err := h.service.Create(*h.ctx, body, h.responseDomain)
 	responseData.Result = shortURL

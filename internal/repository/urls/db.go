@@ -56,7 +56,9 @@ func (repo *DBURLRepository) Create(ctx context.Context, requestEntity model.URL
 	if result == nil {
 		return model.URLEntity{}, ErrURLNotCreated
 	}
-
+	responseEntity.OriginalURL = requestEntity.OriginalURL
+	responseEntity.ShortURL = requestEntity.ShortURL
+	responseEntity.CreatedBy = requestEntity.CreatedBy
 	return responseEntity, nil
 }
 

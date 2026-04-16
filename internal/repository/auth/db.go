@@ -2,10 +2,12 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/artni96/url-shortener/internal/config"
 	"github.com/artni96/url-shortener/internal/model"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jmoiron/sqlx"
 	"go.uber.org/zap"
 )
@@ -23,31 +25,26 @@ type DBAuthRepository struct {
 func (repo *DBAuthRepository) Create(ctx context.Context, user model.UserCreate) (model.UserWithHashedPassword, error) {
 	responseEntity := model.UserWithHashedPassword{}
 
-	insertQuery := "INSERT INTO authors (username, password) VALUES ($1, $2)"
+	insertQuery := "INSERT INTO users (username, password) VALUES ($1, $2) RETURNING id"
 
-	result := repo.db.GetContext(ctx, &responseEntity, insertQuery, user.Username, user.HashedPassword)
-	//var uniqueConstrErr *pgconn.PgError
-	//if err != nil {
-	//	if errors.As(err, &uniqueConstrErr) {
-	//		return responseEntity, ErrUserAlreadyExists
-	//	}
-	//	return responseEntity, fmt.Errorf("failed to create new user: %w", err)
-	//}
+	result, err := repo.db.ExecContext(ctx, insertQuery, user.Username, user.HashedPassword)
+	var uniqueConstrErr *pgconn.PgError
+	if err != nil {
+		if errors.As(err, &uniqueConstrErr) {
+			return responseEntity, ErrUserAlreadyExists
+		}
+		return responseEntity, fmt.Errorf("failed to create new user: %w", err)
+	}
 	if result == nil {
 		return responseEntity, ErrUserNotCreated
 	}
-	//entityID, err := result.LastInsertId()
-	//if err != nil {
-	//	return responseEntity, fmt.Errorf("failed to get last insert ID: %w", err)
-	//}
-	//responseEntity.ID = int(entityID)
-	//responseEntity.Username = user.Username
-	//responseEntity.Password = user.HashedPassword
+	responseEntity.Username = user.Username
+	responseEntity.Password = user.HashedPassword
 	return responseEntity, nil
 }
 
 func (repo *DBAuthRepository) GetUserHashedPassword(ctx context.Context, username string) (model.UserWithHashedPassword, error) {
-	selectQuery := "SELECT id, username, password FROM authors WHERE username = $1"
+	selectQuery := "SELECT id, username, password FROM users WHERE username = $1"
 	userResponse := model.UserWithHashedPassword{}
 	err := repo.db.GetContext(ctx, &userResponse, selectQuery, username)
 	if err != nil {
