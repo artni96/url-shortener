@@ -2,12 +2,10 @@ package auth
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/artni96/url-shortener/internal/config"
 	"github.com/artni96/url-shortener/internal/model"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jmoiron/sqlx"
 	"go.uber.org/zap"
 )
@@ -27,24 +25,24 @@ func (repo *DBAuthRepository) Create(ctx context.Context, user model.UserCreate)
 
 	insertQuery := "INSERT INTO authors (username, password) VALUES ($1, $2)"
 
-	result, err := repo.db.ExecContext(ctx, insertQuery, user.Username, user.HashedPassword)
-	var uniqueConstrErr *pgconn.PgError
-	if err != nil {
-		if errors.As(err, &uniqueConstrErr) {
-			return responseEntity, ErrUserAlreadyExists
-		}
-		return responseEntity, fmt.Errorf("failed to create new user: %w", err)
-	}
+	result := repo.db.GetContext(ctx, &responseEntity, insertQuery, user.Username, user.HashedPassword)
+	//var uniqueConstrErr *pgconn.PgError
+	//if err != nil {
+	//	if errors.As(err, &uniqueConstrErr) {
+	//		return responseEntity, ErrUserAlreadyExists
+	//	}
+	//	return responseEntity, fmt.Errorf("failed to create new user: %w", err)
+	//}
 	if result == nil {
 		return responseEntity, ErrUserNotCreated
 	}
-	entityID, err := result.LastInsertId()
-	if err != nil {
-		return responseEntity, fmt.Errorf("failed to get last insert ID: %w", err)
-	}
-	responseEntity.ID = int(entityID)
-	responseEntity.Username = user.Username
-	responseEntity.Password = user.HashedPassword
+	//entityID, err := result.LastInsertId()
+	//if err != nil {
+	//	return responseEntity, fmt.Errorf("failed to get last insert ID: %w", err)
+	//}
+	//responseEntity.ID = int(entityID)
+	//responseEntity.Username = user.Username
+	//responseEntity.Password = user.HashedPassword
 	return responseEntity, nil
 }
 

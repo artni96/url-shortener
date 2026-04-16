@@ -1,8 +1,7 @@
-ALTER TABLE urls DROP CONSTRAINT IF EXISTS fk_created_by;
 DROP INDEX IF EXISTS idx_short_url;
 DROP INDEX IF EXISTS idx_original_url_unique;
 DROP TABLE IF EXISTS urls CASCADE;
 
-DROP INDEX IF EXISTS idx_authors_id;
+DROP INDEX IF EXISTS idx_users_id;
 DROP INDEX IF EXISTS idx_username_unique;
-DROP TABLE IF EXISTS authors CASCADE;
+DROP TABLE IF EXISTS users CASCADE;
