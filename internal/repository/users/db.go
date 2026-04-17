@@ -11,8 +11,8 @@ import (
 )
 
 type DBUserRepositoryInterface interface {
-	Create(ctx context.Context) (int, error)
-	//GetUserHashedPassword(ctx context.Context, username string) (model.UserWithHashedPassword, error)
+	Create(ctx context.Context, ip string) (model.User, error)
+	GetByIP(ctx context.Context, ip string) (int, error)
 }
 
 type DBUserRepository struct {
@@ -20,41 +20,32 @@ type DBUserRepository struct {
 	logger *zap.Logger
 }
 
-func (repo *DBUserRepository) Create(ctx context.Context) (int, error) {
+func (repo *DBUserRepository) Create(ctx context.Context, ip string) (model.User, error) {
 	var userID int
 
-	insertQuery := "INSERT INTO users DEFAULT VALUES RETURNING id"
+	insertQuery := "INSERT INTO users (ip) VALUES ($1) RETURNING id"
 
-	err := repo.db.GetContext(ctx, &userID, insertQuery)
+	var entity model.User
+	err := repo.db.GetContext(ctx, &userID, insertQuery, ip)
 	if err != nil {
-		return -1, err
+		entity.IP = ip
+		entity.ID = -1
+		return entity, err
 	}
-	//var uniqueConstrErr *pgconn.PgError
-	//if err != nil {
-	//	if errors.As(err, &uniqueConstrErr) {
-	//		return responseEntity, ErrUserAlreadyExists
-	//	}
-	//	return responseEntity, fmt.Errorf("failed to create new user: %w", err)
-	//}
-	//if result == nil {
-	//	return responseEntity, ErrUserNotCreated
-	//}
-	//responseEntity.Username = user.Username
-	//responseEntity.Password = user.HashedPassword
-	return userID, nil
+	entity.ID = userID
+	entity.IP = ip
+	return entity, nil
 }
 
-func (repo *DBUserRepository) GetUserHashedPassword(ctx context.Context, username string) (model.UserWithHashedPassword, error) {
-	selectQuery := "SELECT id, username, password FROM users WHERE username = $1"
-	userResponse := model.UserWithHashedPassword{}
-	err := repo.db.GetContext(ctx, &userResponse, selectQuery, username)
+func (repo *DBUserRepository) GetByIP(ctx context.Context, ip string) (int, error) {
+	var userID int
+
+	selectQuery := "SELECT id FROM users WHERE ip = $1"
+	err := repo.db.GetContext(ctx, &userID, selectQuery, ip)
 	if err != nil {
-		return userResponse, fmt.Errorf("failed to get user hashed password: %w", err)
+		return -1, fmt.Errorf("failed to get user by ip: %w", err)
 	}
-	if userResponse.Username == "" {
-		return userResponse, ErrUserNotFound
-	}
-	return userResponse, nil
+	return userID, nil
 }
 
 func NewUserDBRepository(app *config.App) (*DBUserRepository, error) {

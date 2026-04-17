@@ -3,27 +3,30 @@ package users
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"sync"
 
 	"github.com/artni96/url-shortener/internal/config"
+	"github.com/artni96/url-shortener/internal/model"
 	"go.uber.org/zap"
 )
 
 type InMemoryUserRepositoryInterface interface {
-	Create() (int, error)
+	Create(ip string) (model.User, error)
+	GetByIP(ip string) (int, error)
 
 	uploadInMemoryStorage(filepath string) error
 }
 
 type InMemoryUserRepository struct {
-	mu     sync.Mutex
-	users  []int
+	mu     sync.RWMutex
+	users  map[int]string
 	logger *zap.Logger
 }
 
-func (repo *InMemoryUserRepository) Create() (int, error) {
+func (repo *InMemoryUserRepository) Create(ip string) (model.User, error) {
 	repo.mu.Lock()
 	defer repo.mu.Unlock()
 
@@ -34,13 +37,28 @@ func (repo *InMemoryUserRepository) Create() (int, error) {
 		}
 	}
 	userID := lastUserID + 1
+	repo.users[userID] = ip
+	return model.User{ID: userID, IP: ip}, nil
+}
 
-	return userID, nil
+func (repo *InMemoryUserRepository) GetByIP(ip string) (int, error) {
+	repo.mu.RLock()
+	defer repo.mu.RUnlock()
+
+	if len(repo.users) == 0 {
+		return -1, errors.New("user not found")
+	}
+	for userID, userIP := range repo.users {
+		if userIP == ip {
+			return userID, nil
+		}
+	}
+	return -1, fmt.Errorf("user not found for ip %s", ip)
 }
 
 func NewInMemoryUserRepository(app *config.App) (*InMemoryUserRepository, error) {
 	repo := InMemoryUserRepository{
-		users:  []int{},
+		users:  make(map[int]string),
 		logger: app.Logger,
 	}
 
@@ -68,8 +86,8 @@ func NewWriter(filename string) (*Writer, error) {
 	return &Writer{file: file, writer: bufio.NewWriter(file)}, nil
 }
 
-func (w *Writer) WriteEntity(userID int) error {
-	data, err := json.Marshal(&userID)
+func (w *Writer) WriteEntity(user model.User) error {
+	data, err := json.Marshal(&user)
 	if err != nil {
 		return fmt.Errorf("could not marshal entity: %w", err)
 	}
@@ -106,14 +124,14 @@ func (s *FileScanner) Close() error {
 	return s.file.Close()
 }
 
-func (s *FileScanner) CollectData() ([]int, error) {
-	var result []int
+func (s *FileScanner) CollectData() ([]model.User, error) {
+	var result []model.User
 	for s.scanner.Scan() {
 
 		data := s.scanner.Bytes()
 
-		var userID int
-		if err := json.Unmarshal(data, &userID); err != nil {
+		var user model.User
+		if err := json.Unmarshal(data, &user); err != nil {
 			return nil, fmt.Errorf("could not unmarshal object: %w", err)
 		}
 
@@ -121,18 +139,11 @@ func (s *FileScanner) CollectData() ([]int, error) {
 	return result, nil
 }
 
-func (repo *InMemoryUserRepository) UploadInMemoryStorage(userID int) error {
+func (repo *InMemoryUserRepository) UploadInMemoryStorage(user model.User) error {
 	repo.mu.Lock()
 	defer repo.mu.Unlock()
 
-	//_, ok := repo.users[user.ID]
-	//if ok {
-	//	return fmt.Errorf("%w: user id - %d", ErrUserAlreadyExists, user.ID)
-	//}
-	//repo.users[user.ID] = map[string]string{}
-	//repo.users[user.ID]["username"] = user.Username
-	//repo.users[user.ID]["password"] = user.Password
-	repo.users = append(repo.users, userID)
+	repo.users[user.ID] = user.IP
 	return nil
 }
 
@@ -142,7 +153,7 @@ func (repo *InMemoryUserRepository) uploadInMemoryStorage(filepath string) error
 		return nil
 	}
 	defer func(fileReader *FileScanner) {
-		err := fileReader.Close()
+		err = fileReader.Close()
 		if err != nil {
 			repo.logger.Info("could not close file reader", zap.String("filepath", filepath))
 		}
@@ -160,11 +171,12 @@ func (repo *InMemoryUserRepository) uploadInMemoryStorage(filepath string) error
 			zap.String("error", err.Error()))
 		return fmt.Errorf("could not collect data from file: %w", err)
 	}
-	for _, userID := range result {
-		err := repo.UploadInMemoryStorage(userID)
+	for _, user := range result {
+		err = repo.UploadInMemoryStorage(user)
 		if err != nil {
 			repo.logger.Info("could not upload User Entity to local storage",
-				zap.Int("user ID", userID),
+				zap.Int("user ID", user.ID),
+				zap.String("user IP", user.IP),
 			)
 			return fmt.Errorf("could not upload User Entity to local storage: %w", err)
 		}

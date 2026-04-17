@@ -47,13 +47,15 @@ func (repo *DBURLRepository) Create(ctx context.Context, requestEntity model.URL
 	result, err := repo.db.ExecContext(ctx, insertQuery, requestEntity.OriginalURL, requestEntity.ShortURL, requestEntity.CreatedBy)
 	if err != nil {
 		if errors.As(err, &uniqueConstrErr) {
-
 			selectQuery = "SELECT original_url, short_url FROM urls WHERE original_url = $1"
-			repo.db.GetContext(ctx, &responseEntity, selectQuery, requestEntity.OriginalURL)
-
+			err = repo.db.GetContext(ctx, &responseEntity, selectQuery, requestEntity.OriginalURL)
+			if err != nil {
+				return model.URLEntity{}, fmt.Errorf("failed to insert url: %w", err)
+			}
 			return responseEntity, fmt.Errorf("%w: %s", ErrOriginalURLAlreadyExists, requestEntity.OriginalURL)
 		}
 	}
+
 	if result == nil {
 		return model.URLEntity{}, ErrURLNotCreated
 	}
@@ -73,8 +75,8 @@ func (repo *DBURLRepository) BulkCreate(ctx context.Context, urls []model.URLBul
 	defer tx.Rollback()
 
 	query := "INSERT INTO urls (original_url, short_url) VALUES "
-	values := []interface{}{}
-	result := []model.URLBulkCreate{}
+	var values []interface{}
+	var result []model.URLBulkCreate
 
 	for i, url := range urls {
 		if i > 0 {

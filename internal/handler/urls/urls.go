@@ -91,10 +91,10 @@ func (h *URLHandler) ShortenURLHandler(w http.ResponseWriter, r *http.Request) {
 			}
 			w.Write(resp)
 			return
-		} else {
-			handler.ErrorResponse(w, fmt.Sprintf("Could not create short URL for %s", body.OriginalURL), http.StatusInternalServerError, h.logger)
-			return
 		}
+		handler.ErrorResponse(w, fmt.Sprintf("Could not create short URL for %s", body.OriginalURL), http.StatusInternalServerError, h.logger)
+		return
+
 	}
 
 	w.WriteHeader(http.StatusCreated)
@@ -167,8 +167,9 @@ func (h *URLHandler) BulkCreateURLHandler(w http.ResponseWriter, r *http.Request
 }
 
 func (h *URLHandler) CreateURLHandler(w http.ResponseWriter, r *http.Request) {
-
 	originalURL, err := io.ReadAll(r.Body)
+	defer r.Body.Close()
+
 	if err != nil && err.Error() != "EOF" {
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusBadRequest)
@@ -221,8 +222,6 @@ func (h *URLHandler) CreateURLHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusCreated)
 	w.Write([]byte(shortURL))
-
-	defer r.Body.Close()
 }
 
 func (h *URLHandler) GetURLHandler(w http.ResponseWriter, r *http.Request) {
@@ -359,10 +358,19 @@ func (h *URLHandler) DeleteURLHandler(w http.ResponseWriter, r *http.Request) {
 
 func getOrCreateUserID(h *URLHandler, w http.ResponseWriter, r *http.Request) (int, error) {
 	var userID int
+	var user model.User
 	userToken, err := r.Cookie("Authorization")
 	if errors.Is(err, http.ErrNoCookie) {
-		userID, err = h.userService.Create(*h.ctx)
-		token, err := h.userService.Login(r.Context(), userID)
+		userID, err = h.userService.GetByIP(*h.ctx, r.RemoteAddr)
+		if err != nil && userID == -1 {
+			user, err = h.userService.Create(*h.ctx, r.RemoteAddr)
+			if err != nil {
+				handler.ErrorResponse(w, "could not create user", http.StatusInternalServerError, h.logger)
+				return -1, err
+			}
+			userID = user.ID
+		}
+		token, err := h.userService.Login(userID)
 		if err != nil {
 			return -1, fmt.Errorf("could not create token: %w", err)
 		}
@@ -376,11 +384,11 @@ func getOrCreateUserID(h *URLHandler, w http.ResponseWriter, r *http.Request) (i
 	} else {
 		userID = service.GetUserID(userToken.Value)
 		if userID == -1 {
-			userID, err = h.userService.Create(*h.ctx)
+			user, err = h.userService.Create(*h.ctx, r.RemoteAddr)
 			if err != nil {
 				return -1, fmt.Errorf("could not create token: %w", err)
 			}
-			token, err := h.userService.Login(r.Context(), userID)
+			token, err := h.userService.Login(user.ID)
 			if err != nil {
 				handler.ErrorResponse(w, err.Error(), http.StatusBadRequest, h.logger)
 				return -1, fmt.Errorf("could not create token: %w", err)
