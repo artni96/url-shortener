@@ -74,7 +74,6 @@ func run(cfg *config.Config) error {
 	healthRouter := healthcheck.HealthCheckRouter(&ctx, app)
 	mainRouter.Mount("/", urlRouter)
 	mainRouter.Mount("/ping", healthRouter)
-	//mainRouter.Mount("/api/users", authRouter)
 
 	appLogger.Info("Starting server",
 		zap.String("server address", app.Cfg.ServerAddress),

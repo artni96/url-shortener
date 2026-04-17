@@ -16,6 +16,8 @@ type UserServiceInterface interface {
 	Create(ctx context.Context, ip string) (model.User, error)
 	Login(userID int, cfg *config.Config) (string, error)
 	GetByIP(ctx context.Context, ip string) (int, error)
+
+	BuildJWTString(userID int, cfg *config.Config) (string, error)
 }
 type UserService struct {
 	dbRepository       users.DBUserRepositoryInterface

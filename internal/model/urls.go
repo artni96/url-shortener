@@ -49,3 +49,7 @@ type URLNestedData struct {
 	OriginalURL string `json:"original_url"`
 	CreatedBy   int    `json:"created_by"`
 }
+
+type URLUpdateResponse struct {
+	OriginalURL string `json:"url"`
+}

@@ -240,12 +240,12 @@ func (h *URLHandler) GetURLHandler(w http.ResponseWriter, r *http.Request) {
 
 func (h *URLHandler) GetListHandler(w http.ResponseWriter, r *http.Request) {
 	urlList, err := h.urlService.GetList(*h.ctx, h.responseDomain)
+	w.Header().Set("Content-Type", "application/json")
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("Could not get the list of urls"))
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	resp, err := json.Marshal(urlList)
 	if err != nil {
@@ -257,8 +257,8 @@ func (h *URLHandler) GetListHandler(w http.ResponseWriter, r *http.Request) {
 
 func (h *URLHandler) GetUserListHandler(w http.ResponseWriter, r *http.Request) {
 	userID, err := getOrCreateUserID(h, w, r)
+	w.Header().Set("Content-Type", "application/json")
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
@@ -277,7 +277,6 @@ func (h *URLHandler) GetUserListHandler(w http.ResponseWriter, r *http.Request) 
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		resp, err := json.Marshal(urlList)
 		if err != nil {
@@ -333,7 +332,7 @@ func (h *URLHandler) UpdateURLHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	w.WriteHeader(http.StatusOK)
-	resp, err := json.Marshal(model.URLCreateRequest{OriginalURL: updatedEntity})
+	resp, err := json.Marshal(model.URLUpdateResponse{OriginalURL: updatedEntity})
 	if err != nil {
 		handler.ErrorResponse(w, "could not marshal request body", http.StatusInternalServerError, h.logger)
 		return
@@ -402,6 +401,7 @@ func getOrCreateUserID(h *URLHandler, w http.ResponseWriter, r *http.Request) (i
 				HttpOnly: true,
 				Path:     "/",
 			})
+			fmt.Printf("token created: %s\n", token)
 		}
 	}
 	return userID, nil

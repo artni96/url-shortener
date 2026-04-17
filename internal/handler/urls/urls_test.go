@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/artni96/url-shortener/internal/config"
 	"github.com/artni96/url-shortener/internal/config/db"
@@ -31,6 +32,8 @@ func testHandler(t *testing.T) *URLHandler {
 		ServerAddress:   "localhost:8080",
 		ResponseDomain:  "http://localhost:8080",
 		FileStoragePath: testFile,
+		TokenExp:        time.Hour,
+		SecretKey:       "dontshareme",
 	}
 
 	app := config.App{
@@ -436,7 +439,6 @@ func TestGetListHandler(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-
 			req := httptest.NewRequest(tt.request.method, "/", nil)
 			w := httptest.NewRecorder()
 			h.GetListHandler(w, req)
@@ -543,8 +545,8 @@ func TestUpdateURLHandler(t *testing.T) {
 			res := w.Result()
 			defer res.Body.Close()
 			assert.Equal(t, tt.want.status, res.StatusCode)
-			//resBody, err := io.ReadAll(res.Body)
-			//assert.JSONEq(t, tt.want.message, string(resBody))
+			resBody, err := io.ReadAll(res.Body)
+			assert.JSONEq(t, tt.want.message, string(resBody))
 		})
 	}
 }
@@ -618,6 +620,108 @@ func TestDeleteURLHandler(t *testing.T) {
 			defer res.Body.Close()
 			assert.Equal(t, tt.want.status, res.StatusCode)
 
+		})
+	}
+}
+
+func TestGetUserListHandler(t *testing.T) {
+	h := testHandler(t)
+
+	token, err := h.userService.BuildJWTString(1, h.cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cookie := &http.Cookie{
+		Name:    "Authorization",
+		Value:   token,
+		Path:    "/",
+		Expires: time.Now().Add(time.Hour * 2),
+	}
+
+	type want struct {
+		status      int
+		contentType string
+		message     string
+	}
+	type request struct {
+		method string
+		cookie *http.Cookie
+	}
+	tests := []struct {
+		name    string
+		request request
+		want    want
+	}{
+		{
+			name: "response 200",
+			request: request{
+				method: http.MethodGet,
+				cookie: cookie,
+			},
+			want: want{
+				status:      http.StatusOK,
+				contentType: "application/json",
+				message:     `\[\{"original_url":"https?://[^"]+","short_url":"https?://localhost:8080/[^"]+"\}\]`,
+			},
+		},
+		{
+			name: "response 200",
+			request: request{
+				method: http.MethodGet,
+				cookie: cookie,
+			},
+			want: want{
+				status:      http.StatusOK,
+				contentType: "application/json",
+				message:     "",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+
+			if tt.name == "response 200" {
+				w1 := httptest.NewRecorder()
+				body := []byte("https://practicum.yandex.ru/")
+				reqBody := strings.NewReader(string(body))
+				newURLRec := httptest.NewRequest(http.MethodPost, "/", reqBody)
+				newURLRec.AddCookie(tt.request.cookie)
+				h.CreateURLHandler(w1, newURLRec)
+				newURLRes := w1.Result()
+				defer newURLRes.Body.Close()
+			} else if tt.name == "response 204" {
+				token2, err := h.userService.BuildJWTString(2, h.cfg)
+				if err != nil {
+					t.Fatal(err)
+				}
+				cookie2 := &http.Cookie{
+					Name:    "Authorization",
+					Value:   token2,
+					Path:    "/",
+					Expires: time.Now().Add(time.Hour * 2),
+				}
+
+				w2 := httptest.NewRecorder()
+				body := []byte("https://practicum.yandex.ru/")
+				reqBody := strings.NewReader(string(body))
+				newURLRec := httptest.NewRequest(http.MethodPost, "/", reqBody)
+				newURLRec.AddCookie(cookie2)
+				h.CreateURLHandler(w2, newURLRec)
+			}
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(tt.request.method, "/", nil)
+
+			req.AddCookie(tt.request.cookie)
+			h.GetUserListHandler(w, req)
+			res := w.Result()
+			defer res.Body.Close()
+			assert.Equal(t, tt.want.status, res.StatusCode)
+			assert.Equal(t, tt.want.contentType, res.Header.Get("Content-Type"))
+			resBody, err := io.ReadAll(res.Body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			assert.Regexp(t, tt.want.message, string(resBody))
 		})
 	}
 }
