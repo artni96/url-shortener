@@ -20,12 +20,12 @@ import (
 )
 
 type AuthHandler struct {
-	service service.AuthService
+	service service.UserService
 	logger  *zap.Logger
 	ctx     *context.Context
 }
 
-func NewAuthHandler(ctx *context.Context, service service.AuthService, logger *zap.Logger) *AuthHandler {
+func NewAuthHandler(ctx *context.Context, service service.UserService, logger *zap.Logger) *AuthHandler {
 	return &AuthHandler{
 		ctx:     ctx,
 		service: service,
@@ -88,7 +88,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	return
 }
 
-func AuthRouter(ctx *context.Context, app *config.App, service service.AuthService) chi.Router {
+func AuthRouter(ctx *context.Context, app *config.App, service service.UserService) chi.Router {
 	r := chi.NewRouter()
 
 	r.Use(middlewares.PanicRecoverer(app.Logger))

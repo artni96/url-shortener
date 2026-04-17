@@ -1,4 +1,4 @@
-package auth
+package users
 
 import (
 	"bufio"
@@ -8,68 +8,39 @@ import (
 	"sync"
 
 	"github.com/artni96/url-shortener/internal/config"
-	"github.com/artni96/url-shortener/internal/model"
 	"go.uber.org/zap"
 )
 
-type InMemoryAuthRepositoryInterface interface {
-	Create(user model.UserCreate) (model.UserWithHashedPassword, error)
-	GetUserHashedPassword(username string) (model.UserWithHashedPassword, error)
+type InMemoryUserRepositoryInterface interface {
+	Create() (int, error)
 
 	uploadInMemoryStorage(filepath string) error
 }
 
-type InMemoryAuthRepository struct {
+type InMemoryUserRepository struct {
 	mu     sync.Mutex
-	users  map[int]map[string]string
+	users  []int
 	logger *zap.Logger
 }
 
-func (repo *InMemoryAuthRepository) Create(user model.UserCreate) (model.UserWithHashedPassword, error) {
+func (repo *InMemoryUserRepository) Create() (int, error) {
 	repo.mu.Lock()
 	defer repo.mu.Unlock()
-	responseEntity := model.UserWithHashedPassword{}
 
 	var lastUserID int
-	for id, value := range repo.users {
+	for id := range repo.users {
 		if id > lastUserID {
 			lastUserID = id
 		}
-		if value["username"] == user.Username {
-			return responseEntity, ErrUserAlreadyExists
-		}
 	}
-	entityID := lastUserID + 1
-	repo.users[entityID] = map[string]string{}
-	repo.users[entityID]["username"] = user.Username
-	repo.users[entityID]["password"] = user.HashedPassword
+	userID := lastUserID + 1
 
-	responseEntity.ID = entityID
-	responseEntity.Username = user.Username
-	responseEntity.Password = user.HashedPassword
-	return responseEntity, nil
+	return userID, nil
 }
 
-func (repo *InMemoryAuthRepository) GetUserHashedPassword(username string) (model.UserWithHashedPassword, error) {
-	repo.mu.Lock()
-	defer repo.mu.Unlock()
-	userResponse := model.UserWithHashedPassword{}
-
-	for id, user := range repo.users {
-		if user["username"] == username {
-			userResponse.ID = id
-			userResponse.Username = user["username"]
-			userResponse.Password = user["password"]
-
-			return userResponse, nil
-		}
-	}
-	return userResponse, ErrUserNotFound
-}
-
-func NewInMemoryAuthRepository(app *config.App) (*InMemoryAuthRepository, error) {
-	repo := InMemoryAuthRepository{
-		users:  make(map[int]map[string]string),
+func NewInMemoryUserRepository(app *config.App) (*InMemoryUserRepository, error) {
+	repo := InMemoryUserRepository{
+		users:  []int{},
 		logger: app.Logger,
 	}
 
@@ -97,8 +68,8 @@ func NewWriter(filename string) (*Writer, error) {
 	return &Writer{file: file, writer: bufio.NewWriter(file)}, nil
 }
 
-func (w *Writer) WriteEntity(entity *model.UserWithHashedPassword) error {
-	data, err := json.Marshal(&entity)
+func (w *Writer) WriteEntity(userID int) error {
+	data, err := json.Marshal(&userID)
 	if err != nil {
 		return fmt.Errorf("could not marshal entity: %w", err)
 	}
@@ -135,39 +106,37 @@ func (s *FileScanner) Close() error {
 	return s.file.Close()
 }
 
-func (s *FileScanner) CollectData() ([]model.UserWithHashedPassword, error) {
-	var result []model.UserWithHashedPassword
+func (s *FileScanner) CollectData() ([]int, error) {
+	var result []int
 	for s.scanner.Scan() {
 
 		data := s.scanner.Bytes()
 
-		object := model.UserWithHashedPassword{}
-		if err := json.Unmarshal(data, &object); err != nil {
+		var userID int
+		if err := json.Unmarshal(data, &userID); err != nil {
 			return nil, fmt.Errorf("could not unmarshal object: %w", err)
-		}
-		if object.Username != "" && object.Password != "" {
-			result = append(result, object)
 		}
 
 	}
 	return result, nil
 }
 
-func (repo *InMemoryAuthRepository) UploadInMemoryStorage(user model.UserWithHashedPassword) error {
+func (repo *InMemoryUserRepository) UploadInMemoryStorage(userID int) error {
 	repo.mu.Lock()
 	defer repo.mu.Unlock()
 
-	_, ok := repo.users[user.ID]
-	if ok {
-		return fmt.Errorf("%w: user id - %d", ErrUserAlreadyExists, user.ID)
-	}
-	repo.users[user.ID] = map[string]string{}
-	repo.users[user.ID]["username"] = user.Username
-	repo.users[user.ID]["password"] = user.Password
+	//_, ok := repo.users[user.ID]
+	//if ok {
+	//	return fmt.Errorf("%w: user id - %d", ErrUserAlreadyExists, user.ID)
+	//}
+	//repo.users[user.ID] = map[string]string{}
+	//repo.users[user.ID]["username"] = user.Username
+	//repo.users[user.ID]["password"] = user.Password
+	repo.users = append(repo.users, userID)
 	return nil
 }
 
-func (repo *InMemoryAuthRepository) uploadInMemoryStorage(filepath string) error {
+func (repo *InMemoryUserRepository) uploadInMemoryStorage(filepath string) error {
 	fileReader, err := NewFileScanner(filepath)
 	if fileReader == nil {
 		return nil
@@ -191,12 +160,12 @@ func (repo *InMemoryAuthRepository) uploadInMemoryStorage(filepath string) error
 			zap.String("error", err.Error()))
 		return fmt.Errorf("could not collect data from file: %w", err)
 	}
-	for _, object := range result {
-		err := repo.UploadInMemoryStorage(object)
+	for _, userID := range result {
+		err := repo.UploadInMemoryStorage(userID)
 		if err != nil {
 			repo.logger.Info("could not upload User Entity to local storage",
-				zap.Int("ID", object.ID),
-				zap.String("Username", object.Username))
+				zap.Int("user ID", userID),
+			)
 			return fmt.Errorf("could not upload User Entity to local storage: %w", err)
 		}
 	}

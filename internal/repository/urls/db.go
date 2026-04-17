@@ -16,7 +16,8 @@ type DBURLRepositoryInterface interface {
 	Create(ctx context.Context, url model.URLCreate) (model.URLEntity, error)
 	BulkCreate(ctx context.Context, urls []model.URLBulkCreate) ([]model.URLBulkCreate, error)
 	GetByShortURL(ctx context.Context, shortURL string) (string, error)
-	GetList(ctx context.Context, createdBy int) ([]model.URLEntity, error)
+	GetList(ctx context.Context) ([]model.URLEntity, error)
+	GetUserList(ctx context.Context, createdBy int) ([]model.URLEntity, error)
 	Update(ctx context.Context, url model.URLEntity) (model.URLEntity, error)
 	Delete(ctx context.Context, shortURL string) error
 
@@ -112,19 +113,23 @@ func (repo *DBURLRepository) GetByShortURL(ctx context.Context, shortURL string)
 	return entity, nil
 }
 
-func (repo *DBURLRepository) GetList(ctx context.Context, createdBy int) ([]model.URLEntity, error) {
+func (repo *DBURLRepository) GetList(ctx context.Context) ([]model.URLEntity, error) {
 	var entities []model.URLEntity
-	var err error
 
-	if createdBy != -1 {
-		selectQuery := "SELECT original_url, short_url FROM urls where created_by = $1"
-		err = repo.db.SelectContext(ctx, &entities, selectQuery, createdBy)
-	} else {
-		selectQuery := "SELECT original_url, short_url FROM urls"
-		err = repo.db.SelectContext(ctx, &entities, selectQuery)
+	selectQuery := "SELECT original_url, short_url FROM urls"
+	err := repo.db.SelectContext(ctx, &entities, selectQuery)
+
+	if err != nil {
+		return nil, fmt.Errorf("GetList - failure to execute request: %w", err)
 	}
+	return entities, nil
+}
 
-	//err := repo.db.SelectContext(ctx, &entities, selectQuery)
+func (repo *DBURLRepository) GetUserList(ctx context.Context, createdBy int) ([]model.URLEntity, error) {
+	var entities []model.URLEntity
+
+	selectQuery := "SELECT original_url, short_url FROM urls where created_by = $1"
+	err := repo.db.SelectContext(ctx, &entities, selectQuery, createdBy)
 
 	if err != nil {
 		return nil, fmt.Errorf("GetList - failure to execute request: %w", err)

@@ -17,7 +17,9 @@ type InMemoryURLRepositoryInterface interface {
 	Create(entity model.URLCreate) (model.URLEntity, error)
 	BulkCreate(originalURLs []model.URLBulkCreate) ([]model.URLBulkCreate, error)
 	GetByShortURL(shortURL string) (string, error)
-	GetList(createdBy int) ([]model.URLEntity, error)
+	GetList() ([]model.URLEntity, error)
+	GetUserList(createdBy int) ([]model.URLEntity, error)
+
 	Update(model.URLEntity) (model.URLEntity, error)
 	Delete(shortURL string) error
 
@@ -107,20 +109,26 @@ func (repo *InMemoryURLRepository) GetByShortURL(shortURL string) (string, error
 	return entity.OriginalURL, nil
 }
 
-func (repo *InMemoryURLRepository) GetList(createdBy int) ([]model.URLEntity, error) {
+func (repo *InMemoryURLRepository) GetList() ([]model.URLEntity, error) {
 	repo.mu.RLock()
 	defer repo.mu.RUnlock()
 	var entities []model.URLEntity
 
 	for shortURL, data := range repo.urls {
-		if createdBy != -1 {
-			if data.CreatedBy == createdBy {
-				entities = append(entities, model.URLEntity{OriginalURL: data.OriginalURL, ShortURL: shortURL, CreatedBy: data.CreatedBy})
-			}
-		} else {
+		entities = append(entities, model.URLEntity{OriginalURL: data.OriginalURL, ShortURL: shortURL, CreatedBy: data.CreatedBy})
+	}
+	return entities, nil
+}
+
+func (repo *InMemoryURLRepository) GetUserList(createdBy int) ([]model.URLEntity, error) {
+	repo.mu.RLock()
+	defer repo.mu.RUnlock()
+	var entities []model.URLEntity
+
+	for shortURL, data := range repo.urls {
+		if data.CreatedBy == createdBy {
 			entities = append(entities, model.URLEntity{OriginalURL: data.OriginalURL, ShortURL: shortURL, CreatedBy: data.CreatedBy})
 		}
-
 	}
 	return entities, nil
 }

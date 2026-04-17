@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/artni96/url-shortener/internal/config"
 	"github.com/artni96/url-shortener/internal/handler"
@@ -27,26 +28,34 @@ const urlPattern = `^https?:\/\/`
 
 type URLHandler struct {
 	responseDomain string
-	service        service.URLServiceInterface
+	urlService     service.URLServiceInterface
+	userService    service.UserServiceInterface
 	logger         *zap.Logger
 	ctx            *context.Context
 }
 
-func NewURLHandler(ctx *context.Context, app *config.App, urlService service.URLServiceInterface) *URLHandler {
+func NewURLHandler(ctx *context.Context, app *config.App, urlService service.URLServiceInterface, userService service.UserServiceInterface) *URLHandler {
 	return &URLHandler{
 		responseDomain: app.Cfg.ResponseDomain,
-		service:        urlService,
+		urlService:     urlService,
+		userService:    userService,
 		logger:         app.Logger,
 		ctx:            ctx,
 	}
 }
 
 func (h *URLHandler) ShortenURLHandler(w http.ResponseWriter, r *http.Request) {
+	userID, err := getOrCreateUserID(h, w, r)
+	if err != nil {
+		handler.ErrorResponse(w, "internal server error", http.StatusInternalServerError, h.logger)
+		return
+	}
+
 	var responseData model.URLCreateResponse
 	var body model.URLCreateRequest
 	var buf bytes.Buffer
 
-	_, err := buf.ReadFrom(r.Body)
+	_, err = buf.ReadFrom(r.Body)
 	defer r.Body.Close()
 
 	if err != nil {
@@ -58,26 +67,14 @@ func (h *URLHandler) ShortenURLHandler(w http.ResponseWriter, r *http.Request) {
 		handler.ErrorResponse(w, "could not unmarshal request body", http.StatusBadRequest, h.logger)
 		return
 	}
+	body.CreatedBy = userID
 
 	if !isURLCorrect(body.OriginalURL) {
 		handler.ErrorResponse(w, fmt.Sprintf("url '%s' is invalid", body.OriginalURL), http.StatusBadRequest, h.logger)
 		return
 	}
 
-	userToken, err := r.Cookie("Authorization")
-	if err == nil {
-		userID := service.GetUserID(userToken.Value)
-		if userID == -1 {
-			handler.ErrorResponse(w, "invalid user", http.StatusUnauthorized, h.logger)
-			return
-		}
-		body.CreatedBy = userID
-	}
-	if body.CreatedBy == 0 {
-		body.CreatedBy = -1
-	}
-
-	shortURL, err := h.service.Create(*h.ctx, body, h.responseDomain)
+	shortURL, err := h.urlService.Create(*h.ctx, body, h.responseDomain)
 	responseData.Result = shortURL
 	w.Header().Set("Content-Type", "application/json")
 
@@ -147,7 +144,7 @@ func (h *URLHandler) BulkCreateURLHandler(w http.ResponseWriter, r *http.Request
 		body[i].CreatedBy = userID
 	}
 
-	responseData, err := h.service.BulkCreate(*h.ctx, body, h.responseDomain)
+	responseData, err := h.urlService.BulkCreate(*h.ctx, body, h.responseDomain)
 	if err != nil {
 		if errors.Is(err, urls.ErrShortURLAlreadyExists) {
 			handler.ErrorResponse(w, err.Error(), http.StatusBadRequest, h.logger)
@@ -196,17 +193,13 @@ func (h *URLHandler) CreateURLHandler(w http.ResponseWriter, r *http.Request) {
 	entity := model.URLCreateRequest{
 		OriginalURL: urlStr,
 	}
-	userToken, err := r.Cookie("Authorization")
-	if err == nil {
-		userID := service.GetUserID(userToken.Value)
-		if userID == -1 {
-			handler.ErrorResponse(w, "invalid user", http.StatusUnauthorized, h.logger)
-			return
-		}
-		entity.CreatedBy = userID
+	userID, err := getOrCreateUserID(h, w, r)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
 	}
-
-	shortURL, err := h.service.Create(*h.ctx, entity, h.responseDomain)
+	entity.CreatedBy = userID
+	shortURL, err := h.urlService.Create(*h.ctx, entity, h.responseDomain)
 	w.Header().Set("Content-Type", "text/plain")
 	if err != nil {
 		if errors.Is(err, urls.ErrOriginalURLAlreadyExists) {
@@ -233,7 +226,7 @@ func (h *URLHandler) CreateURLHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *URLHandler) GetURLHandler(w http.ResponseWriter, r *http.Request) {
-	redirectTo, err := h.service.GetByShortURL(*h.ctx, strings.TrimPrefix(r.URL.Path, "/"))
+	redirectTo, err := h.urlService.GetByShortURL(*h.ctx, strings.TrimPrefix(r.URL.Path, "/"))
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("URL not found"))
@@ -245,18 +238,7 @@ func (h *URLHandler) GetURLHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *URLHandler) GetListHandler(w http.ResponseWriter, r *http.Request) {
-	userID := -1
-	userToken, err := r.Cookie("Authorization")
-	if err == nil {
-		tokenUserID := service.GetUserID(userToken.Value)
-		if tokenUserID == -1 {
-			handler.ErrorResponse(w, "invalid user", http.StatusUnauthorized, h.logger)
-			return
-		}
-		userID = tokenUserID
-	}
-
-	urlList, err := h.service.GetList(*h.ctx, h.responseDomain, userID)
+	urlList, err := h.urlService.GetList(*h.ctx, h.responseDomain)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("Could not get the list of urls"))
@@ -270,6 +252,40 @@ func (h *URLHandler) GetListHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Write(resp)
+}
+
+func (h *URLHandler) GetUserListHandler(w http.ResponseWriter, r *http.Request) {
+	userID, err := getOrCreateUserID(h, w, r)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+	if userID == -1 {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	} else {
+		urlList, err := h.urlService.GetUserList(*h.ctx, h.responseDomain, userID)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte("Could not get the list of urls"))
+			return
+		}
+
+		if len(urlList) == 0 {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		resp, err := json.Marshal(urlList)
+		if err != nil {
+			handler.ErrorResponse(w, "could not marshal request body", http.StatusInternalServerError, h.logger)
+			return
+		}
+		w.Write(resp)
+	}
+
 }
 
 func (h *URLHandler) UpdateURLHandler(w http.ResponseWriter, r *http.Request) {
@@ -296,7 +312,7 @@ func (h *URLHandler) UpdateURLHandler(w http.ResponseWriter, r *http.Request) {
 		ShortURL:    shortURL,
 	}
 	w.Header().Set("Content-Type", "application/json")
-	updatedEntity, err := h.service.Update(*h.ctx, entityToUpdate)
+	updatedEntity, err := h.urlService.Update(*h.ctx, entityToUpdate)
 	if err != nil {
 		if errors.Is(err, urls.ErrURLNotFound) {
 			handler.ErrorResponse(w, err.Error(), http.StatusBadRequest, h.logger)
@@ -326,7 +342,7 @@ func (h *URLHandler) UpdateURLHandler(w http.ResponseWriter, r *http.Request) {
 
 func (h *URLHandler) DeleteURLHandler(w http.ResponseWriter, r *http.Request) {
 	shortURL := strings.TrimPrefix(r.URL.Path, "/")
-	err := h.service.Delete(*h.ctx, shortURL)
+	err := h.urlService.Delete(*h.ctx, shortURL)
 	w.Header().Set("Content-Type", "application/json")
 
 	if err != nil {
@@ -341,7 +357,47 @@ func (h *URLHandler) DeleteURLHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func URLRouter(ctx *context.Context, app *config.App, urlService service.URLServiceInterface) chi.Router {
+func getOrCreateUserID(h *URLHandler, w http.ResponseWriter, r *http.Request) (int, error) {
+	var userID int
+	userToken, err := r.Cookie("Authorization")
+	if errors.Is(err, http.ErrNoCookie) {
+		userID, err = h.userService.Create(*h.ctx)
+		token, err := h.userService.Login(r.Context(), userID)
+		if err != nil {
+			return -1, fmt.Errorf("could not create token: %w", err)
+		}
+		http.SetCookie(w, &http.Cookie{
+			Name:     "Authorization",
+			Value:    token,
+			Expires:  time.Now().Add(service.TOKEN_EXP),
+			HttpOnly: true,
+			Path:     "/",
+		})
+	} else {
+		userID = service.GetUserID(userToken.Value)
+		if userID == -1 {
+			userID, err = h.userService.Create(*h.ctx)
+			if err != nil {
+				return -1, fmt.Errorf("could not create token: %w", err)
+			}
+			token, err := h.userService.Login(r.Context(), userID)
+			if err != nil {
+				handler.ErrorResponse(w, err.Error(), http.StatusBadRequest, h.logger)
+				return -1, fmt.Errorf("could not create token: %w", err)
+			}
+			http.SetCookie(w, &http.Cookie{
+				Name:     "Authorization",
+				Value:    token,
+				Expires:  time.Now().Add(service.TOKEN_EXP),
+				HttpOnly: true,
+				Path:     "/",
+			})
+		}
+	}
+	return userID, nil
+}
+
+func URLRouter(ctx *context.Context, app *config.App, urlService service.URLServiceInterface, userService service.UserServiceInterface) chi.Router {
 	r := chi.NewRouter()
 
 	r.Use(middlewares.PanicRecoverer(app.Logger))
@@ -349,7 +405,7 @@ func URLRouter(ctx *context.Context, app *config.App, urlService service.URLServ
 	r.Use(logger.RequestLoggerMiddleware(app.Logger))
 	r.Use(config.GzipMiddleware)
 
-	urlHandler := NewURLHandler(ctx, app, urlService)
+	urlHandler := NewURLHandler(ctx, app, urlService, userService)
 
 	r.Route("/", func(r chi.Router) {
 		r.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {
@@ -358,6 +414,7 @@ func URLRouter(ctx *context.Context, app *config.App, urlService service.URLServ
 		})
 		r.Post("/api/shorten", urlHandler.ShortenURLHandler)
 		r.Post("/api/shorten/batch", urlHandler.BulkCreateURLHandler)
+		r.Get("/api/user/urls", urlHandler.GetUserListHandler)
 		r.Get("/", urlHandler.GetListHandler)
 		r.Post("/", urlHandler.CreateURLHandler)
 		r.Get("/{id}", urlHandler.GetURLHandler)
