@@ -14,7 +14,7 @@ import (
 
 type UserServiceInterface interface {
 	Create(ctx context.Context, ip string) (model.User, error)
-	Login(userID int) (string, error)
+	Login(userID int, cfg *config.Config) (string, error)
 	GetByIP(ctx context.Context, ip string) (int, error)
 }
 type UserService struct {
@@ -61,9 +61,9 @@ func (s *UserService) Create(ctx context.Context, ip string) (model.User, error)
 	return responseUser, nil
 }
 
-func (s *UserService) Login(userID int) (string, error) {
+func (s *UserService) Login(userID int, cfg *config.Config) (string, error) {
 
-	token, err := s.BuildJWTString(userID)
+	token, err := s.BuildJWTString(userID, cfg)
 	if err != nil {
 		s.app.Logger.Info("failed to build token", zap.Error(err))
 		return "", err
@@ -94,32 +94,27 @@ type Claims struct {
 	UserID int
 }
 
-const (
-	TOKEN_EXP  = time.Minute * 1
-	SECRET_KEY = "dontshareme"
-)
-
-func (s *UserService) BuildJWTString(userID int) (string, error) {
+func (s *UserService) BuildJWTString(userID int, cfg *config.Config) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, Claims{
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(TOKEN_EXP)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(cfg.TokenExp)),
 		},
 		UserID: userID,
 	})
-	tokenString, err := token.SignedString([]byte(SECRET_KEY))
+	tokenString, err := token.SignedString([]byte(cfg.SecretKey))
 	if err != nil {
 		return "", fmt.Errorf("failed to sign token: %v", err)
 	}
 	return tokenString, nil
 }
 
-func GetUserID(tokenString string) int {
+func GetUserID(tokenString string, cfg *config.Config) int {
 	claims := &Claims{}
 	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
-		return []byte(SECRET_KEY), nil
+		return []byte(cfg.SecretKey), nil
 	})
 	if err != nil {
 		return -1

@@ -32,15 +32,17 @@ type URLHandler struct {
 	userService    service.UserServiceInterface
 	logger         *zap.Logger
 	ctx            *context.Context
+	cfg            *config.Config
 }
 
-func NewURLHandler(ctx *context.Context, app *config.App, urlService service.URLServiceInterface, userService service.UserServiceInterface) *URLHandler {
+func NewURLHandler(ctx *context.Context, app *config.App, urlService service.URLServiceInterface, userService service.UserServiceInterface, cfg *config.Config) *URLHandler {
 	return &URLHandler{
 		responseDomain: app.Cfg.ResponseDomain,
 		urlService:     urlService,
 		userService:    userService,
 		logger:         app.Logger,
 		ctx:            ctx,
+		cfg:            cfg,
 	}
 }
 
@@ -127,7 +129,7 @@ func (h *URLHandler) BulkCreateURLHandler(w http.ResponseWriter, r *http.Request
 	userID := -1
 	userToken, err := r.Cookie("Authorization")
 	if err == nil {
-		userID = service.GetUserID(userToken.Value)
+		userID = service.GetUserID(userToken.Value, h.cfg)
 		if userID == -1 {
 			handler.ErrorResponse(w, "invalid user", http.StatusUnauthorized, h.logger)
 			return
@@ -370,25 +372,25 @@ func getOrCreateUserID(h *URLHandler, w http.ResponseWriter, r *http.Request) (i
 			}
 			userID = user.ID
 		}
-		token, err := h.userService.Login(userID)
+		token, err := h.userService.Login(userID, h.cfg)
 		if err != nil {
 			return -1, fmt.Errorf("could not create token: %w", err)
 		}
 		http.SetCookie(w, &http.Cookie{
 			Name:     "Authorization",
 			Value:    token,
-			Expires:  time.Now().Add(service.TOKEN_EXP),
+			Expires:  time.Now().Add(h.cfg.TokenExp),
 			HttpOnly: true,
 			Path:     "/",
 		})
 	} else {
-		userID = service.GetUserID(userToken.Value)
+		userID = service.GetUserID(userToken.Value, h.cfg)
 		if userID == -1 {
 			user, err = h.userService.Create(*h.ctx, r.RemoteAddr)
 			if err != nil {
 				return -1, fmt.Errorf("could not create token: %w", err)
 			}
-			token, err := h.userService.Login(user.ID)
+			token, err := h.userService.Login(user.ID, h.cfg)
 			if err != nil {
 				handler.ErrorResponse(w, err.Error(), http.StatusBadRequest, h.logger)
 				return -1, fmt.Errorf("could not create token: %w", err)
@@ -396,7 +398,7 @@ func getOrCreateUserID(h *URLHandler, w http.ResponseWriter, r *http.Request) (i
 			http.SetCookie(w, &http.Cookie{
 				Name:     "Authorization",
 				Value:    token,
-				Expires:  time.Now().Add(service.TOKEN_EXP),
+				Expires:  time.Now().Add(h.cfg.TokenExp),
 				HttpOnly: true,
 				Path:     "/",
 			})
@@ -405,7 +407,7 @@ func getOrCreateUserID(h *URLHandler, w http.ResponseWriter, r *http.Request) (i
 	return userID, nil
 }
 
-func URLRouter(ctx *context.Context, app *config.App, urlService service.URLServiceInterface, userService service.UserServiceInterface) chi.Router {
+func URLRouter(ctx *context.Context, app *config.App, urlService service.URLServiceInterface, userService service.UserServiceInterface, cfg *config.Config) chi.Router {
 	r := chi.NewRouter()
 
 	r.Use(middlewares.PanicRecoverer(app.Logger))
@@ -413,7 +415,7 @@ func URLRouter(ctx *context.Context, app *config.App, urlService service.URLServ
 	r.Use(logger.RequestLoggerMiddleware(app.Logger))
 	r.Use(config.GzipMiddleware)
 
-	urlHandler := NewURLHandler(ctx, app, urlService, userService)
+	urlHandler := NewURLHandler(ctx, app, urlService, userService, cfg)
 
 	r.Route("/", func(r chi.Router) {
 		r.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {

@@ -51,7 +51,7 @@ func testHandler(t *testing.T) *URLHandler {
 	}
 	urlService := service.NewURLService(nil, urlInMemoryRepository, &app)
 	userService := service.NewUserService(nil, userInMemoryRepository, &app)
-	h := NewURLHandler(&ctx, &app, urlService, userService)
+	h := NewURLHandler(&ctx, &app, urlService, userService, &cfg)
 	return h
 }
 

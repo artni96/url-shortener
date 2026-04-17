@@ -70,7 +70,7 @@ func run(cfg *config.Config) error {
 	}
 
 	mainRouter := chi.NewRouter()
-	urlRouter := urls.URLRouter(&ctx, app, urlService, userService)
+	urlRouter := urls.URLRouter(&ctx, app, urlService, userService, cfg)
 	healthRouter := healthcheck.HealthCheckRouter(&ctx, app)
 	mainRouter.Mount("/", urlRouter)
 	mainRouter.Mount("/ping", healthRouter)
