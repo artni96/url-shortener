@@ -233,6 +233,7 @@ func (h *URLHandler) GetURLHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/plain")
 	w.Header().Set("Location", entity.OriginalURL)
+	fmt.Println(w.Header().Get("Location"))
 	w.WriteHeader(http.StatusTemporaryRedirect)
 }
 

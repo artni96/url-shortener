@@ -301,7 +301,7 @@ func TestGetURLHandler(t *testing.T) {
 			if tt.want.status == http.StatusTemporaryRedirect {
 				assert.Equal(t, tt.want.status, res.StatusCode)
 				assert.Equal(t, tt.want.contentType, res.Header.Get("Content-Type"))
-				//assert.Equal(t, tt.want.redirectTo, res.Header.Get("Location"))
+				assert.Equal(t, tt.want.redirectTo, res.Header.Get("Location"))
 			}
 			defer res.Body.Close()
 		})

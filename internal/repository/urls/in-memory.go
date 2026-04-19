@@ -107,8 +107,9 @@ func (repo *InMemoryURLRepository) GetByShortURL(shortURL string) (model.GetBySh
 	}
 
 	return model.GetByShortURLResponse{
-		ShortURL:  shortURL,
-		IsDeleted: entity.IsDeleted,
+		OriginalURL: entity.OriginalURL,
+		ShortURL:    shortURL,
+		IsDeleted:   entity.IsDeleted,
 	}, nil
 }
 
