@@ -109,11 +109,16 @@ func (h *URLHandler) ShortenURLHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *URLHandler) BulkCreateURLHandler(w http.ResponseWriter, r *http.Request) {
+	userID, err := getOrCreateUserID(h, w, r)
+	if err != nil {
+		handler.ErrorResponse(w, "internal server error", http.StatusInternalServerError, h.logger)
+		return
+	}
 
 	var body []model.URLBulkCreateRequest
 	var buf bytes.Buffer
 
-	_, err := buf.ReadFrom(r.Body)
+	_, err = buf.ReadFrom(r.Body)
 	defer r.Body.Close()
 
 	if err != nil {
@@ -124,17 +129,6 @@ func (h *URLHandler) BulkCreateURLHandler(w http.ResponseWriter, r *http.Request
 	if err = json.Unmarshal(buf.Bytes(), &body); err != nil {
 		handler.ErrorResponse(w, "could not unmarshal request body", http.StatusBadRequest, h.logger)
 		return
-	}
-
-	userID := -1
-	userToken, err := r.Cookie("Authorization")
-	if err == nil {
-		userID = service.GetUserID(userToken.Value, h.cfg)
-		if userID == -1 {
-			handler.ErrorResponse(w, "invalid user", http.StatusUnauthorized, h.logger)
-			return
-		}
-
 	}
 
 	// валидация входных данных

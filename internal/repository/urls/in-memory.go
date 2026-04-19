@@ -239,6 +239,7 @@ func (w *Writer) BulkWriteEntities(entities []model.URLEntity, toTruncate bool) 
 		entityForFile := model.URLEntity{
 			OriginalURL: entity.OriginalURL,
 			ShortURL:    entity.ShortURL,
+			CreatedBy:   entity.CreatedBy,
 		}
 		data, err := json.Marshal(&entityForFile)
 		if err != nil {

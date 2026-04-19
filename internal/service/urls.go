@@ -227,6 +227,7 @@ func (s *URLService) BulkCreate(ctx context.Context, urls []model.URLBulkCreateR
 			entitiesForFile = append(entitiesForFile, model.URLEntity{
 				OriginalURL: entity.OriginalURL,
 				ShortURL:    entity.ShortURL,
+				CreatedBy:   entity.CreatedBy,
 			})
 		}
 		err = fileWriter.BulkWriteEntities(entitiesForFile, false)

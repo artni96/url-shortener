@@ -42,9 +42,9 @@ func (repo *DBURLRepository) Create(ctx context.Context, requestEntity model.URL
 		return model.URLEntity{}, fmt.Errorf("%w: short url already exists", ErrShortURLAlreadyExists)
 	}
 	var uniqueConstrErr *pgconn.PgError
-	insertQuery := "INSERT INTO urls (original_url, short_url, created_by) VALUES ($1, $2, $3)"
+	insertQuery := "INSERT INTO urls (original_url, short_url, created_by, is_deleted) VALUES ($1, $2, $3, $4)"
 
-	result, err := repo.db.ExecContext(ctx, insertQuery, requestEntity.OriginalURL, requestEntity.ShortURL, requestEntity.CreatedBy)
+	result, err := repo.db.ExecContext(ctx, insertQuery, requestEntity.OriginalURL, requestEntity.ShortURL, requestEntity.CreatedBy, false)
 	if err != nil {
 		if errors.As(err, &uniqueConstrErr) {
 			selectQuery = "SELECT original_url, short_url FROM urls WHERE original_url = $1"
@@ -74,7 +74,7 @@ func (repo *DBURLRepository) BulkCreate(ctx context.Context, urls []model.URLBul
 
 	defer tx.Rollback()
 
-	query := "INSERT INTO urls (original_url, short_url) VALUES "
+	query := "INSERT INTO urls (original_url, short_url, created_by, is_deleted) VALUES "
 	var values []interface{}
 	var result []model.URLBulkCreate
 
@@ -82,8 +82,8 @@ func (repo *DBURLRepository) BulkCreate(ctx context.Context, urls []model.URLBul
 		if i > 0 {
 			query += ", "
 		}
-		query += fmt.Sprintf("($%d, $%d)", len(values)+1, len(values)+2)
-		values = append(values, url.OriginalURL, url.ShortURL)
+		query += fmt.Sprintf("($%d, $%d, $%d, $%d)", len(values)+1, len(values)+2, len(values)+3, len(values)+4)
+		values = append(values, url.OriginalURL, url.ShortURL, url.CreatedBy, false)
 		result = append(result, model.URLBulkCreate{
 			CorrelationID: url.CorrelationID,
 			ShortURL:      url.ShortURL,
