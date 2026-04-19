@@ -17,11 +17,12 @@ var ErrFailedToCreated = errors.New("could not create ShortURL")
 type URLServiceInterface interface {
 	GetList(ctx context.Context, responseDomain string) ([]model.URLListEntity, error)
 	GetUserList(ctx context.Context, responseDomain string, createdBy int) ([]model.URLListEntity, error)
-	GetByShortURL(ctx context.Context, urlID string) (string, error)
+	GetByShortURL(ctx context.Context, urlID string) (model.GetByShortURLResponse, error)
 	Create(ctx context.Context, entity model.URLCreateRequest, responseDomain string) (string, error)
 	BulkCreate(ctx context.Context, urls []model.URLBulkCreateRequest, responseDomain string) ([]model.URLBulkCreateResponse, error)
 	Update(ctx context.Context, entity model.URLEntity) (string, error)
 	Delete(ctx context.Context, urlID string) error
+	BulkDelete(ctx context.Context, urls []model.URLBulkDelete) error
 }
 type URLService struct {
 	dbRepository       urlrepo.DBURLRepositoryInterface
@@ -79,21 +80,21 @@ func (s *URLService) GetUserList(ctx context.Context, responseDomain string, cre
 	return response, nil
 }
 
-func (s *URLService) GetByShortURL(ctx context.Context, shortURL string) (string, error) {
-	var originalURL string
+func (s *URLService) GetByShortURL(ctx context.Context, shortURL string) (model.GetByShortURLResponse, error) {
+	var entity model.GetByShortURLResponse
 	var err error
 
 	if s.dbRepository != nil {
-		originalURL, err = s.dbRepository.GetByShortURL(ctx, shortURL)
+		entity, err = s.dbRepository.GetByShortURL(ctx, shortURL)
 	} else {
-		originalURL, err = s.inMemoryRepository.GetByShortURL(shortURL)
+		entity, err = s.inMemoryRepository.GetByShortURL(shortURL)
 	}
 
 	if err != nil {
-		return "", fmt.Errorf("%w", err)
+		return model.GetByShortURLResponse{}, fmt.Errorf("%w", err)
 	}
 
-	return originalURL, nil
+	return entity, nil
 }
 
 func (s *URLService) Create(ctx context.Context, requestEntity model.URLCreateRequest, responseDomain string) (string, error) {
@@ -308,6 +309,14 @@ func (s *URLService) Delete(ctx context.Context, shortURL string) error {
 		}
 	}
 
+	return nil
+}
+
+func (s *URLService) BulkDelete(ctx context.Context, urls []model.URLBulkDelete) error {
+	err := s.dbRepository.BulkDelete(ctx, urls)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 

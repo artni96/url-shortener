@@ -16,7 +16,7 @@ import (
 type InMemoryURLRepositoryInterface interface {
 	Create(entity model.URLCreate) (model.URLEntity, error)
 	BulkCreate(originalURLs []model.URLBulkCreate) ([]model.URLBulkCreate, error)
-	GetByShortURL(shortURL string) (string, error)
+	GetByShortURL(shortURL string) (model.GetByShortURLResponse, error)
 	GetList() ([]model.URLEntity, error)
 	GetUserList(createdBy int) ([]model.URLEntity, error)
 
@@ -96,17 +96,20 @@ func (repo *InMemoryURLRepository) BulkCreate(urls []model.URLBulkCreate) ([]mod
 	return result, nil
 }
 
-func (repo *InMemoryURLRepository) GetByShortURL(shortURL string) (string, error) {
+func (repo *InMemoryURLRepository) GetByShortURL(shortURL string) (model.GetByShortURLResponse, error) {
 	repo.mu.RLock()
 	defer repo.mu.RUnlock()
 	var entity model.URLNestedData
 
 	entity, ok := repo.urls[shortURL]
 	if !ok {
-		return "", ErrURLNotFound
+		return model.GetByShortURLResponse{}, ErrURLNotFound
 	}
 
-	return entity.OriginalURL, nil
+	return model.GetByShortURLResponse{
+		ShortURL:  shortURL,
+		IsDeleted: entity.IsDeleted,
+	}, nil
 }
 
 func (repo *InMemoryURLRepository) GetList() ([]model.URLEntity, error) {

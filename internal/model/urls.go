@@ -16,6 +16,12 @@ type URLCreateResponse struct {
 	Result string `json:"result"`
 }
 
+type GetByShortURLResponse struct {
+	OriginalURL string `json:"original_url" db:"original_url"`
+	ShortURL    string `json:"short_url" db:"short_url"`
+	IsDeleted   bool   `json:"is_deleted" db:"is_deleted"`
+}
+
 type URLEntity struct {
 	OriginalURL string `json:"original_url" db:"original_url"`
 	ShortURL    string `json:"short_url" db:"short_url"`
@@ -49,8 +55,14 @@ type URLBulkCreateResponse struct {
 type URLNestedData struct {
 	OriginalURL string `json:"original_url"`
 	CreatedBy   int    `json:"created_by"`
+	IsDeleted   bool   `json:"is_deleted"`
 }
 
 type URLUpdateResponse struct {
 	OriginalURL string `json:"url"`
+}
+
+type URLBulkDelete struct {
+	ShortURL  string `json:"short_url"`
+	CreatedBy int    `json:"created_by"`
 }

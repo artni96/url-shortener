@@ -221,14 +221,18 @@ func (h *URLHandler) CreateURLHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *URLHandler) GetURLHandler(w http.ResponseWriter, r *http.Request) {
-	redirectTo, err := h.urlService.GetByShortURL(*h.ctx, strings.TrimPrefix(r.URL.Path, "/"))
+	entity, err := h.urlService.GetByShortURL(*h.ctx, strings.TrimPrefix(r.URL.Path, "/"))
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("URL not found"))
 		return
 	}
+	if entity.IsDeleted == true {
+		w.WriteHeader(http.StatusGone)
+		return
+	}
 	w.Header().Set("Content-Type", "text/plain")
-	w.Header().Set("Location", redirectTo)
+	w.Header().Set("Location", entity.OriginalURL)
 	w.WriteHeader(http.StatusTemporaryRedirect)
 }
 
@@ -256,6 +260,7 @@ func (h *URLHandler) GetUserListHandler(w http.ResponseWriter, r *http.Request) 
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
+
 	if userID == -1 {
 		w.WriteHeader(http.StatusNoContent)
 		return
@@ -351,6 +356,43 @@ func (h *URLHandler) DeleteURLHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (h *URLHandler) BulkDeleteHandler(w http.ResponseWriter, r *http.Request) {
+	userID, err := getOrCreateUserID(h, w, r)
+	w.Header().Set("Content-Type", "application/json")
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	body, err := io.ReadAll(r.Body)
+	defer r.Body.Close()
+	w.Header().Set("Content-Type", "application/json")
+
+	if err != nil {
+		handler.ErrorResponse(w, "could not read request body", http.StatusBadRequest, h.logger)
+		return
+	}
+	var urlList []string
+	err = json.Unmarshal(body, &urlList)
+	if err != nil {
+		handler.ErrorResponse(w, "could not unmarshal request body", http.StatusBadRequest, h.logger)
+		return
+	}
+	var urlsToDelete []model.URLBulkDelete
+	for _, url := range urlList {
+		urlsToDelete = append(urlsToDelete, model.URLBulkDelete{
+			ShortURL:  url,
+			CreatedBy: userID,
+		})
+	}
+	err = h.urlService.BulkDelete(*h.ctx, urlsToDelete)
+	if err != nil {
+		handler.ErrorResponse(w, "could not delete the short URLs", http.StatusBadRequest, h.logger)
+		return
+	}
+	w.WriteHeader(http.StatusAccepted)
+}
+
 func getOrCreateUserID(h *URLHandler, w http.ResponseWriter, r *http.Request) (int, error) {
 	var userID int
 	var user model.User
@@ -419,6 +461,7 @@ func URLRouter(ctx *context.Context, app *config.App, urlService service.URLServ
 		r.Post("/api/shorten", urlHandler.ShortenURLHandler)
 		r.Post("/api/shorten/batch", urlHandler.BulkCreateURLHandler)
 		r.Get("/api/user/urls", urlHandler.GetUserListHandler)
+		r.Delete("/api/user/urls", urlHandler.BulkDeleteHandler)
 		r.Get("/", urlHandler.GetListHandler)
 		r.Post("/", urlHandler.CreateURLHandler)
 		r.Get("/{id}", urlHandler.GetURLHandler)

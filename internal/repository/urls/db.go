@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/artni96/url-shortener/internal/config"
 	"github.com/artni96/url-shortener/internal/model"
@@ -15,11 +16,12 @@ import (
 type DBURLRepositoryInterface interface {
 	Create(ctx context.Context, url model.URLCreate) (model.URLEntity, error)
 	BulkCreate(ctx context.Context, urls []model.URLBulkCreate) ([]model.URLBulkCreate, error)
-	GetByShortURL(ctx context.Context, shortURL string) (string, error)
+	GetByShortURL(ctx context.Context, shortURL string) (model.GetByShortURLResponse, error)
 	GetList(ctx context.Context) ([]model.URLEntity, error)
 	GetUserList(ctx context.Context, createdBy int) ([]model.URLEntity, error)
 	Update(ctx context.Context, url model.URLEntity) (model.URLEntity, error)
 	Delete(ctx context.Context, shortURL string) error
+	BulkDelete(ctx context.Context, urls []model.URLBulkDelete) error
 
 	IsURLListUnique(ctx context.Context, shortURLList []string) (bool, error)
 }
@@ -103,14 +105,129 @@ func (repo *DBURLRepository) BulkCreate(ctx context.Context, urls []model.URLBul
 	return result, nil
 }
 
-func (repo *DBURLRepository) GetByShortURL(ctx context.Context, shortURL string) (string, error) {
-	var entity string
+func (repo *DBURLRepository) BulkDelete(ctx context.Context, urls []model.URLBulkDelete) error {
+	doneChan := make(chan struct{})
+	defer close(doneChan)
 
-	selectQuery := "SELECT original_url FROM urls where short_url = $1"
+	inputChan := generator(doneChan, urls)
+	channels := fanOut(ctx, doneChan, inputChan, repo)
+
+	resultChan := fanIn(doneChan, channels...)
+
+	var urlList []string
+
+	for url := range resultChan {
+		urlList = append(urlList, url)
+	}
+	query := "UPDATE urls SET is_deleted = TRUE WHERE short_url = ANY($1)"
+	result, err := repo.db.ExecContext(ctx, query, urlList)
+	if err != nil {
+		return err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows != int64(len(urls)) {
+		return errors.New("failed to delete urls")
+	}
+	return nil
+
+}
+
+func generator(doneCh chan struct{}, urls []model.URLBulkDelete) chan model.URLBulkDelete {
+	inCh := make(chan model.URLBulkDelete)
+
+	go func() {
+		defer close(inCh)
+
+		for _, url := range urls {
+			select {
+			case <-doneCh:
+				return
+			case inCh <- url:
+
+			}
+		}
+	}()
+	return inCh
+}
+
+func canBeDeleted(ctx context.Context, doneCh chan struct{}, inCh chan model.URLBulkDelete, repo *DBURLRepository) chan string {
+	res := make(chan string)
+
+	go func() {
+		defer close(res)
+
+		for url := range inCh {
+
+			var createdBy int
+			selectQuery := "SELECT created_by FROM urls WHERE short_url = $1 AND created_by = $2"
+			err := repo.db.GetContext(ctx, &createdBy, selectQuery, url.ShortURL, url.CreatedBy)
+			if err != nil {
+				return
+			}
+
+			select {
+			case <-doneCh:
+				return
+			case res <- url.ShortURL:
+
+			}
+		}
+	}()
+	return res
+}
+
+func fanOut(ctx context.Context, doneCh chan struct{}, inCh chan model.URLBulkDelete, repo *DBURLRepository) []chan string {
+	numWorkers := 5
+
+	channels := make([]chan string, numWorkers)
+
+	for i := 0; i < numWorkers; i++ {
+		canBeDeletedCh := canBeDeleted(ctx, doneCh, inCh, repo)
+		channels[i] = canBeDeletedCh
+	}
+	return channels
+}
+
+func fanIn(doneCh chan struct{}, resultChs ...chan string) chan string {
+	finalCh := make(chan string)
+
+	var wg sync.WaitGroup
+	for _, ch := range resultChs {
+		wg.Add(1)
+
+		chClosure := ch
+
+		go func() {
+			defer wg.Done()
+
+			for data := range chClosure {
+				select {
+				case <-doneCh:
+					return
+				case finalCh <- data:
+				}
+			}
+		}()
+	}
+
+	go func() {
+		wg.Wait()
+		close(finalCh)
+	}()
+	return finalCh
+}
+
+func (repo *DBURLRepository) GetByShortURL(ctx context.Context, shortURL string) (model.GetByShortURLResponse, error) {
+	var entity model.GetByShortURLResponse
+
+	selectQuery := "SELECT original_url, short_url, is_deleted FROM urls where short_url = $1"
 	err := repo.db.GetContext(ctx, &entity, selectQuery, shortURL)
 
 	if err != nil {
-		return "", fmt.Errorf("%w: %s", ErrURLNotFound, shortURL)
+		return model.GetByShortURLResponse{}, fmt.Errorf("%w: %s", ErrURLNotFound, shortURL)
 	}
 	return entity, nil
 }
