@@ -22,6 +22,7 @@ type InMemoryURLRepositoryInterface interface {
 
 	Update(model.URLEntity) (model.URLEntity, error)
 	Delete(shortURL string) error
+	BulkDelete(urls []model.URLDelete) ([]error, error)
 
 	IsURLListUnique(shortURLList []string) (bool, error)
 	UploadInMemoryStorage(url model.URLEntity) error
@@ -119,7 +120,7 @@ func (repo *InMemoryURLRepository) GetList() ([]model.URLEntity, error) {
 	var entities []model.URLEntity
 
 	for shortURL, data := range repo.urls {
-		entities = append(entities, model.URLEntity{OriginalURL: data.OriginalURL, ShortURL: shortURL, CreatedBy: data.CreatedBy})
+		entities = append(entities, model.URLEntity{OriginalURL: data.OriginalURL, ShortURL: shortURL, CreatedBy: data.CreatedBy, IsDeleted: data.IsDeleted})
 	}
 	return entities, nil
 }
@@ -131,7 +132,7 @@ func (repo *InMemoryURLRepository) GetUserList(createdBy int) ([]model.URLEntity
 
 	for shortURL, data := range repo.urls {
 		if data.CreatedBy == createdBy {
-			entities = append(entities, model.URLEntity{OriginalURL: data.OriginalURL, ShortURL: shortURL, CreatedBy: data.CreatedBy})
+			entities = append(entities, model.URLEntity{OriginalURL: data.OriginalURL, ShortURL: shortURL, CreatedBy: data.CreatedBy, IsDeleted: data.IsDeleted})
 		}
 	}
 	return entities, nil
@@ -174,6 +175,27 @@ func (repo *InMemoryURLRepository) Delete(shortURL string) error {
 		}
 	}
 	return fmt.Errorf("%w", ErrURLNotFound)
+}
+
+func (repo *InMemoryURLRepository) BulkDelete(urls []model.URLDelete) ([]error, error) {
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
+
+	var errs []error
+
+	for _, url := range urls {
+		urlData, ok := repo.urls[url.ShortURL]
+		if !ok {
+			errs = append(errs, fmt.Errorf("%w: %s", ErrURLNotFound, url.ShortURL))
+		} else if urlData.CreatedBy != url.CreatedBy {
+			errs = append(errs, fmt.Errorf("%w: url author id: %d, request user id: %d", ErrUserIsNotAuthor, urlData.CreatedBy, url.CreatedBy))
+		} else {
+			urlData.IsDeleted = true
+			repo.urls[url.ShortURL] = urlData
+		}
+	}
+
+	return errs, nil
 }
 
 func (repo *InMemoryURLRepository) IsURLListUnique(shortURLList []string) (bool, error) {

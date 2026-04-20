@@ -379,18 +379,14 @@ func (h *URLHandler) BulkDeleteHandler(w http.ResponseWriter, r *http.Request) {
 		handler.ErrorResponse(w, "could not unmarshal request body", http.StatusBadRequest, h.logger)
 		return
 	}
-	var urlsToDelete []model.URLBulkDelete
+	var urlsToDelete []model.URLDelete
 	for _, url := range urlList {
-		urlsToDelete = append(urlsToDelete, model.URLBulkDelete{
+		urlsToDelete = append(urlsToDelete, model.URLDelete{
 			ShortURL:  url,
 			CreatedBy: userID,
 		})
 	}
 	err = h.urlService.BulkDelete(*h.ctx, urlsToDelete)
-	if err != nil {
-		handler.ErrorResponse(w, "could not delete the short URLs", http.StatusBadRequest, h.logger)
-		return
-	}
 	w.WriteHeader(http.StatusAccepted)
 }
 

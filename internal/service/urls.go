@@ -22,7 +22,7 @@ type URLServiceInterface interface {
 	BulkCreate(ctx context.Context, urls []model.URLBulkCreateRequest, responseDomain string) ([]model.URLBulkCreateResponse, error)
 	Update(ctx context.Context, entity model.URLEntity) (string, error)
 	Delete(ctx context.Context, urlID string) error
-	BulkDelete(ctx context.Context, urls []model.URLBulkDelete) error
+	BulkDelete(ctx context.Context, urls []model.URLDelete) error
 }
 type URLService struct {
 	dbRepository       urlrepo.DBURLRepositoryInterface
@@ -260,22 +260,9 @@ func (s *URLService) Update(ctx context.Context, entity model.URLEntity) (string
 	if err != nil {
 		return "", fmt.Errorf("%w", err)
 	}
-	if s.dbRepository == nil && s.app.Cfg.FileStoragePath != "" {
-		entitiesForFile, err := s.inMemoryRepository.GetList()
-		fileWriter, err := urlrepo.NewWriter(s.app.Cfg.FileStoragePath)
-		if err != nil {
-			s.app.Logger.Error("could not create file writer",
-				zap.String("path", s.app.Cfg.FileStoragePath),
-				zap.String("error message", err.Error()),
-			)
-			return "", fmt.Errorf("%w", err)
-		}
-		defer fileWriter.Close()
-
-		err = fileWriter.BulkWriteEntities(entitiesForFile, true)
-		if err != nil {
-			return "", fmt.Errorf("%w", err)
-		}
+	err = BulkFileUpdate(s)
+	if err != nil {
+		return "", err
 	}
 	return updatedEntity.OriginalURL, nil
 }
@@ -292,8 +279,56 @@ func (s *URLService) Delete(ctx context.Context, shortURL string) error {
 		return fmt.Errorf("%w", err)
 	}
 
+	err = BulkFileUpdate(s)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *URLService) BulkDelete(ctx context.Context, urls []model.URLDelete) error {
+	set := make(map[string]struct{})
+	var uniqueURLs []model.URLDelete
+	var err error
+	var errs []error
+
+	for _, url := range urls {
+		if _, ok := set[url.ShortURL]; ok {
+			continue
+		} else {
+			set[url.ShortURL] = struct{}{}
+			uniqueURLs = append(uniqueURLs, url)
+		}
+	}
+
+	if s.dbRepository != nil {
+		errs, err = s.dbRepository.BulkDelete(ctx, urls)
+	} else {
+		errs, err = s.inMemoryRepository.BulkDelete(uniqueURLs)
+	}
+
+	if err != nil {
+		s.app.Logger.Error("failed to bulk delete urls")
+		return err
+	}
+	for _, e := range errs {
+		s.app.Logger.Info("failed to delete url", zap.Error(e))
+	}
+
+	err = BulkFileUpdate(s)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func BulkFileUpdate(s *URLService) error {
 	if s.dbRepository == nil && s.app.Cfg.FileStoragePath != "" {
 		entitiesForFile, err := s.inMemoryRepository.GetList()
+		if err != nil {
+			return fmt.Errorf("failed to get url list: %w", err)
+		}
 		fileWriter, err := urlrepo.NewWriter(s.app.Cfg.FileStoragePath)
 		if err != nil {
 			s.app.Logger.Error("could not create file writer",
@@ -307,15 +342,7 @@ func (s *URLService) Delete(ctx context.Context, shortURL string) error {
 		if err != nil {
 			return fmt.Errorf("%w", err)
 		}
-	}
-
-	return nil
-}
-
-func (s *URLService) BulkDelete(ctx context.Context, urls []model.URLBulkDelete) error {
-	err := s.dbRepository.BulkDelete(ctx, urls)
-	if err != nil {
-		return err
+		return nil
 	}
 	return nil
 }

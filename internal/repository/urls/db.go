@@ -8,6 +8,7 @@ import (
 
 	"github.com/artni96/url-shortener/internal/config"
 	"github.com/artni96/url-shortener/internal/model"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jmoiron/sqlx"
 	"go.uber.org/zap"
@@ -21,7 +22,7 @@ type DBURLRepositoryInterface interface {
 	GetUserList(ctx context.Context, createdBy int) ([]model.URLEntity, error)
 	Update(ctx context.Context, url model.URLEntity) (model.URLEntity, error)
 	Delete(ctx context.Context, shortURL string) error
-	BulkDelete(ctx context.Context, urls []model.URLBulkDelete) error
+	BulkDelete(ctx context.Context, urls []model.URLDelete) ([]error, error)
 
 	IsURLListUnique(ctx context.Context, shortURLList []string) (bool, error)
 }
@@ -105,7 +106,7 @@ func (repo *DBURLRepository) BulkCreate(ctx context.Context, urls []model.URLBul
 	return result, nil
 }
 
-func (repo *DBURLRepository) BulkDelete(ctx context.Context, urls []model.URLBulkDelete) error {
+func (repo *DBURLRepository) BulkDelete(ctx context.Context, urls []model.URLDelete) ([]error, error) {
 	doneChan := make(chan struct{})
 	defer close(doneChan)
 
@@ -115,28 +116,27 @@ func (repo *DBURLRepository) BulkDelete(ctx context.Context, urls []model.URLBul
 	resultChan := fanIn(doneChan, channels...)
 
 	var urlList []string
+	var errs []error
 
 	for url := range resultChan {
-		urlList = append(urlList, url)
+		if url.Err != nil {
+			errs = append(errs, url.Err)
+		} else {
+			urlList = append(urlList, url.ShortURL)
+		}
 	}
+
 	query := "UPDATE urls SET is_deleted = TRUE WHERE short_url = ANY($1)"
-	result, err := repo.db.ExecContext(ctx, query, urlList)
+	_, err := repo.db.ExecContext(ctx, query, urlList)
 	if err != nil {
-		return err
+		return errs, err
 	}
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if rows != int64(len(urls)) {
-		return errors.New("failed to delete urls")
-	}
-	return nil
+	return errs, nil
 
 }
 
-func generator(doneCh chan struct{}, urls []model.URLBulkDelete) chan model.URLBulkDelete {
-	inCh := make(chan model.URLBulkDelete)
+func generator(doneCh chan struct{}, urls []model.URLDelete) chan model.URLDelete {
+	inCh := make(chan model.URLDelete)
 
 	go func() {
 		defer close(inCh)
@@ -153,25 +153,41 @@ func generator(doneCh chan struct{}, urls []model.URLBulkDelete) chan model.URLB
 	return inCh
 }
 
-func canBeDeleted(ctx context.Context, doneCh chan struct{}, inCh chan model.URLBulkDelete, repo *DBURLRepository) chan string {
-	res := make(chan string)
+type Result struct {
+	ShortURL string
+	Err      error
+}
+
+func canBeDeleted(ctx context.Context, doneCh chan struct{}, inCh chan model.URLDelete, repo *DBURLRepository) chan Result {
+	res := make(chan Result)
 
 	go func() {
 		defer close(res)
 
 		for url := range inCh {
 
+			urlData := Result{
+				ShortURL: url.ShortURL,
+				Err:      nil,
+			}
 			var createdBy int
-			selectQuery := "SELECT created_by FROM urls WHERE short_url = $1 AND created_by = $2"
-			err := repo.db.GetContext(ctx, &createdBy, selectQuery, url.ShortURL, url.CreatedBy)
+			selectQuery := "SELECT created_by FROM urls WHERE short_url = $1"
+			err := repo.db.GetContext(ctx, &createdBy, selectQuery, url.ShortURL)
+
 			if err != nil {
-				return
+				if errors.As(err, &pgx.ErrNoRows) {
+					urlData.Err = fmt.Errorf("%w: %s", ErrURLNotFound, url.ShortURL)
+				}
+			}
+
+			if urlData.Err == nil && createdBy != url.CreatedBy {
+				urlData.Err = fmt.Errorf("%w: url author id: %d, request user id: %d", ErrUserIsNotAuthor, createdBy, url.CreatedBy)
 			}
 
 			select {
 			case <-doneCh:
 				return
-			case res <- url.ShortURL:
+			case res <- urlData:
 
 			}
 		}
@@ -179,10 +195,10 @@ func canBeDeleted(ctx context.Context, doneCh chan struct{}, inCh chan model.URL
 	return res
 }
 
-func fanOut(ctx context.Context, doneCh chan struct{}, inCh chan model.URLBulkDelete, repo *DBURLRepository) []chan string {
+func fanOut(ctx context.Context, doneCh chan struct{}, inCh chan model.URLDelete, repo *DBURLRepository) []chan Result {
 	numWorkers := 5
 
-	channels := make([]chan string, numWorkers)
+	channels := make([]chan Result, numWorkers)
 
 	for i := 0; i < numWorkers; i++ {
 		canBeDeletedCh := canBeDeleted(ctx, doneCh, inCh, repo)
@@ -191,8 +207,8 @@ func fanOut(ctx context.Context, doneCh chan struct{}, inCh chan model.URLBulkDe
 	return channels
 }
 
-func fanIn(doneCh chan struct{}, resultChs ...chan string) chan string {
-	finalCh := make(chan string)
+func fanIn(doneCh chan struct{}, resultChs ...chan Result) chan Result {
+	finalCh := make(chan Result)
 
 	var wg sync.WaitGroup
 	for _, ch := range resultChs {

@@ -62,7 +62,7 @@ type URLUpdateResponse struct {
 	OriginalURL string `json:"url"`
 }
 
-type URLBulkDelete struct {
+type URLDelete struct {
 	ShortURL  string `json:"short_url"`
 	CreatedBy int    `json:"created_by"`
 }
