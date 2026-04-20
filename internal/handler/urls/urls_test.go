@@ -1,10 +1,12 @@
 package urls
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -13,6 +15,7 @@ import (
 
 	"github.com/artni96/url-shortener/internal/config"
 	"github.com/artni96/url-shortener/internal/config/db"
+	"github.com/artni96/url-shortener/internal/model"
 	"github.com/artni96/url-shortener/internal/repository/urls"
 	"github.com/artni96/url-shortener/internal/repository/users"
 	"github.com/artni96/url-shortener/internal/service"
@@ -724,6 +727,117 @@ func TestGetUserListHandler(t *testing.T) {
 				t.Fatal(err)
 			}
 			assert.Regexp(t, tt.want.message, string(resBody))
+		})
+	}
+}
+
+func TestBulkDeleteURLHandler(t *testing.T) {
+	userID := 1
+	h := testHandler(t)
+	token, err := h.userService.BuildJWTString(userID, h.cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cookie := &http.Cookie{
+		Name:    "Authorization",
+		Value:   token,
+		Path:    "/",
+		Expires: time.Now().Add(time.Hour * 2),
+	}
+
+	type want struct {
+		status      int
+		contentType string
+	}
+	type request struct {
+		method string
+		cookie *http.Cookie
+	}
+	type mocks struct {
+		urls []string
+	}
+	tests := []struct {
+		name    string
+		request request
+		want    want
+		mocks   mocks
+	}{
+		{
+			name: "success",
+			request: request{
+				method: http.MethodDelete,
+				cookie: cookie,
+			},
+			want: want{
+				status:      http.StatusAccepted,
+				contentType: "application/json",
+			},
+			mocks: mocks{
+				urls: []string{
+					"https://test1.com", "https://test2.com",
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var mockURLs []model.URLBulkCreateRequest
+
+			for i, originalURL := range tt.mocks.urls {
+				mockURLs = append(mockURLs, model.URLBulkCreateRequest{
+					CorrelationID: string(rune(i)),
+					OriginalURL:   originalURL,
+					CreatedBy:     userID,
+				})
+			}
+			body, err := json.Marshal(mockURLs)
+			if err != nil {
+				t.Fatal(err)
+			}
+			bulkCreateReqBody := strings.NewReader(string(body))
+			bulkCreateReq := httptest.NewRequest(http.MethodPost, "/", bulkCreateReqBody)
+			bulkCreateReq.AddCookie(tt.request.cookie)
+
+			w1 := httptest.NewRecorder()
+			h.BulkCreateURLHandler(w1, bulkCreateReq)
+			respBody := w1.Result().Body
+			defer respBody.Close()
+
+			bulkCreateReqBodyResp, err := io.ReadAll(respBody)
+			var URLList []model.URLBulkCreate
+			err = json.Unmarshal(bulkCreateReqBodyResp, &URLList)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var shortURLList []string
+			for _, urlData := range URLList {
+				fmt.Println(urlData.ShortURL)
+				uri, err := url.Parse(urlData.ShortURL)
+				if err != nil {
+					t.Fatal(err)
+				}
+				shortURLList = append(shortURLList, strings.TrimPrefix(uri.Path, "/"))
+			}
+
+			assert.Equal(t, http.StatusCreated, w1.Result().StatusCode)
+			assert.Equal(t, tt.want.contentType, w1.Result().Header.Get("Content-Type"))
+
+			bodyBytes, err := json.Marshal(shortURLList)
+			fmt.Println(string(bodyBytes))
+			req := httptest.NewRequest(http.MethodDelete, "/api/user/urls", strings.NewReader(string(bodyBytes)))
+			req.AddCookie(tt.request.cookie)
+			w2 := httptest.NewRecorder()
+			h.BulkDeleteURLHandler(w2, req)
+			assert.Equal(t, tt.want.status, w2.Result().StatusCode)
+			assert.Equal(t, tt.want.contentType, w2.Result().Header.Get("Content-Type"))
+
+			for _, shortURL := range shortURLList {
+				w4 := httptest.NewRecorder()
+				fmt.Println(shortURL)
+				req1 := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/%s", shortURL), nil)
+				h.GetURLHandler(w4, req1)
+				assert.Equal(t, http.StatusGone, w4.Result().StatusCode)
+			}
 		})
 	}
 }

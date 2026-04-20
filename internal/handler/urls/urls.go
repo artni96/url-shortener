@@ -233,7 +233,6 @@ func (h *URLHandler) GetURLHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/plain")
 	w.Header().Set("Location", entity.OriginalURL)
-	fmt.Println(w.Header().Get("Location"))
 	w.WriteHeader(http.StatusTemporaryRedirect)
 }
 
@@ -357,7 +356,7 @@ func (h *URLHandler) DeleteURLHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *URLHandler) BulkDeleteHandler(w http.ResponseWriter, r *http.Request) {
+func (h *URLHandler) BulkDeleteURLHandler(w http.ResponseWriter, r *http.Request) {
 	userID, err := getOrCreateUserID(h, w, r)
 	w.Header().Set("Content-Type", "application/json")
 	if err != nil {
@@ -458,7 +457,7 @@ func URLRouter(ctx *context.Context, app *config.App, urlService service.URLServ
 		r.Post("/api/shorten", urlHandler.ShortenURLHandler)
 		r.Post("/api/shorten/batch", urlHandler.BulkCreateURLHandler)
 		r.Get("/api/user/urls", urlHandler.GetUserListHandler)
-		r.Delete("/api/user/urls", urlHandler.BulkDeleteHandler)
+		r.Delete("/api/user/urls", urlHandler.BulkDeleteURLHandler)
 		r.Get("/", urlHandler.GetListHandler)
 		r.Post("/", urlHandler.CreateURLHandler)
 		r.Get("/{id}", urlHandler.GetURLHandler)

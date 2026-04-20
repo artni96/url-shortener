@@ -110,7 +110,7 @@ func (repo *DBURLRepository) BulkDelete(ctx context.Context, urls []model.URLDel
 	defer close(doneChan)
 
 	inputChan := generator(doneChan, urls)
-	channels := fanOut(ctx, doneChan, inputChan, repo)
+	channels := fanOut(ctx, doneChan, inputChan, repo, len(urls))
 
 	resultChan := fanIn(doneChan, channels...)
 
@@ -194,12 +194,11 @@ func canBeDeleted(ctx context.Context, doneCh chan struct{}, inCh chan model.URL
 	return res
 }
 
-func fanOut(ctx context.Context, doneCh chan struct{}, inCh chan model.URLDelete, repo *DBURLRepository) []chan Result {
-	numWorkers := 5
+func fanOut(ctx context.Context, doneCh chan struct{}, inCh chan model.URLDelete, repo *DBURLRepository, workersNum int) []chan Result {
 
-	channels := make([]chan Result, numWorkers)
+	channels := make([]chan Result, workersNum)
 
-	for i := 0; i < numWorkers; i++ {
+	for i := 0; i < workersNum; i++ {
 		canBeDeletedCh := canBeDeleted(ctx, doneCh, inCh, repo)
 		channels[i] = canBeDeletedCh
 	}
