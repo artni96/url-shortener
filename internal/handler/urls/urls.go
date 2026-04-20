@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/artni96/url-shortener/internal/config"
@@ -357,36 +358,48 @@ func (h *URLHandler) DeleteURLHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *URLHandler) BulkDeleteURLHandler(w http.ResponseWriter, r *http.Request) {
-	userID, err := getOrCreateUserID(h, w, r)
 	w.Header().Set("Content-Type", "application/json")
-	if err != nil {
-		w.WriteHeader(http.StatusUnauthorized)
-		return
-	}
-
-	body, err := io.ReadAll(r.Body)
-	defer r.Body.Close()
-	w.Header().Set("Content-Type", "application/json")
-
-	if err != nil {
-		handler.ErrorResponse(w, "could not read request body", http.StatusBadRequest, h.logger)
-		return
-	}
-	var urlList []string
-	err = json.Unmarshal(body, &urlList)
-	if err != nil {
-		handler.ErrorResponse(w, "could not unmarshal request body", http.StatusBadRequest, h.logger)
-		return
-	}
-	var urlsToDelete []model.URLDelete
-	for _, url := range urlList {
-		urlsToDelete = append(urlsToDelete, model.URLDelete{
-			ShortURL:  url,
-			CreatedBy: userID,
-		})
-	}
-	err = h.urlService.BulkDelete(*h.ctx, urlsToDelete)
 	w.WriteHeader(http.StatusAccepted)
+
+	//if err != nil {
+	//	w.WriteHeader(http.StatusUnauthorized)
+	//	return
+	//}
+	var wg sync.WaitGroup
+	go func() {
+		wg.Add(1)
+		userID, err := getOrCreateUserID(h, w, r)
+		if err != nil {
+
+		}
+		localCtx := context.Background()
+
+		body, err := io.ReadAll(r.Body)
+		defer r.Body.Close()
+		//w.Header().Set("Content-Type", "application/json")
+
+		if err != nil {
+			//handler.ErrorResponse(w, "could not read request body", http.StatusBadRequest, h.logger)
+			//return
+		}
+		var urlList []string
+		err = json.Unmarshal(body, &urlList)
+		if err != nil {
+			//handler.ErrorResponse(w, "could not unmarshal request body", http.StatusBadRequest, h.logger)
+			//return
+		}
+		var urlsToDelete []model.URLDelete
+		for _, url := range urlList {
+			urlsToDelete = append(urlsToDelete, model.URLDelete{
+				ShortURL:  url,
+				CreatedBy: userID,
+			})
+		}
+		err = h.urlService.BulkDelete(localCtx, urlsToDelete)
+		wg.Done()
+	}()
+	wg.Wait()
+
 }
 
 func getOrCreateUserID(h *URLHandler, w http.ResponseWriter, r *http.Request) (int, error) {
