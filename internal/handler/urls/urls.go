@@ -433,7 +433,6 @@ func getOrCreateUserID(h *URLHandler, w http.ResponseWriter, r *http.Request) (i
 				HttpOnly: true,
 				Path:     "/",
 			})
-			fmt.Printf("token created: %s\n", token)
 		}
 	}
 	return userID, nil
