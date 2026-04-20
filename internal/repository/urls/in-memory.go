@@ -186,7 +186,7 @@ func (repo *InMemoryURLRepository) BulkDelete(urls []model.URLDelete) ([]error, 
 	for _, url := range urls {
 		urlData, ok := repo.urls[url.ShortURL]
 		if !ok {
-			errs = append(errs, fmt.Errorf("%w: %s", ErrURLNotFound, url.ShortURL))
+			errs = append(errs, fmt.Errorf("%w, short url: %s", ErrURLNotFound, url.ShortURL))
 		} else if urlData.CreatedBy != url.CreatedBy {
 			errs = append(errs, fmt.Errorf("%w: url author id: %d, request user id: %d", ErrUserIsNotAuthor, urlData.CreatedBy, url.CreatedBy))
 		} else {

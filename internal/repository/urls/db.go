@@ -8,7 +8,6 @@ import (
 
 	"github.com/artni96/url-shortener/internal/config"
 	"github.com/artni96/url-shortener/internal/model"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jmoiron/sqlx"
 	"go.uber.org/zap"
@@ -175,8 +174,8 @@ func canBeDeleted(ctx context.Context, doneCh chan struct{}, inCh chan model.URL
 			err := repo.db.GetContext(ctx, &createdBy, selectQuery, url.ShortURL)
 
 			if err != nil {
-				if errors.As(err, &pgx.ErrNoRows) {
-					urlData.Err = fmt.Errorf("%w: %s", ErrURLNotFound, url.ShortURL)
+				if err.Error() == "sql: no rows in result set" {
+					urlData.Err = fmt.Errorf("%w, short url: %s", ErrURLNotFound, url.ShortURL)
 				}
 			}
 
