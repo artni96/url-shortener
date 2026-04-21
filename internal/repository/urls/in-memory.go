@@ -217,7 +217,8 @@ func (repo *InMemoryURLRepository) UploadInMemoryStorage(urlEntity model.URLEnti
 	}
 	repo.urls[urlEntity.ShortURL] = model.URLNestedData{
 		OriginalURL: urlEntity.OriginalURL,
-		CreatedBy:   -1,
+		CreatedBy:   urlEntity.CreatedBy,
+		IsDeleted:   urlEntity.IsDeleted,
 	}
 	return nil
 }
@@ -266,6 +267,7 @@ func (w *Writer) BulkWriteEntities(entities []model.URLEntity, toTruncate bool) 
 			OriginalURL: entity.OriginalURL,
 			ShortURL:    entity.ShortURL,
 			CreatedBy:   entity.CreatedBy,
+			IsDeleted:   entity.IsDeleted,
 		}
 		data, err := json.Marshal(&entityForFile)
 		if err != nil {
@@ -273,11 +275,11 @@ func (w *Writer) BulkWriteEntities(entities []model.URLEntity, toTruncate bool) 
 		}
 
 		if _, err = w.writer.Write(data); err != nil {
-			return fmt.Errorf("could not write to file: %w", err)
+			return fmt.Errorf("could not write urls data to file: %w", err)
 		}
 
 		if err = w.writer.WriteByte('\n'); err != nil {
-			return fmt.Errorf("could not write to file: %w", err)
+			return fmt.Errorf("could not write urls data to file: %w", err)
 		}
 		defer w.Close()
 	}

@@ -361,32 +361,26 @@ func (h *URLHandler) BulkDeleteURLHandler(w http.ResponseWriter, r *http.Request
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)
 
-	//if err != nil {
-	//	w.WriteHeader(http.StatusUnauthorized)
-	//	return
-	//}
 	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
-		wg.Add(1)
 		userID, err := getOrCreateUserID(h, w, r)
 		if err != nil {
-
+			h.logger.Info("could not get user id from request", zap.Error(err))
 		}
-		localCtx := context.Background()
+		localCtx, cancel := context.WithTimeout(*h.ctx, time.Second*5)
+		defer cancel()
 
 		body, err := io.ReadAll(r.Body)
 		defer r.Body.Close()
-		//w.Header().Set("Content-Type", "application/json")
 
 		if err != nil {
-			//handler.ErrorResponse(w, "could not read request body", http.StatusBadRequest, h.logger)
-			//return
+			h.logger.Info("could not read request body", zap.Error(err))
 		}
 		var urlList []string
 		err = json.Unmarshal(body, &urlList)
 		if err != nil {
-			//handler.ErrorResponse(w, "could not unmarshal request body", http.StatusBadRequest, h.logger)
-			//return
+			h.logger.Info("failed to unmarshal request body", zap.Error(err))
 		}
 		var urlsToDelete []model.URLDelete
 		for _, url := range urlList {
@@ -396,10 +390,9 @@ func (h *URLHandler) BulkDeleteURLHandler(w http.ResponseWriter, r *http.Request
 			})
 		}
 		err = h.urlService.BulkDelete(localCtx, urlsToDelete)
-		wg.Done()
+		defer wg.Done()
 	}()
 	wg.Wait()
-
 }
 
 func getOrCreateUserID(h *URLHandler, w http.ResponseWriter, r *http.Request) (int, error) {

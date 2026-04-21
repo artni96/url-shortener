@@ -8,6 +8,7 @@ import (
 	"github.com/artni96/url-shortener/internal/config"
 	"github.com/artni96/url-shortener/internal/model"
 	urlrepo "github.com/artni96/url-shortener/internal/repository/urls"
+	usersrepo "github.com/artni96/url-shortener/internal/repository/users"
 	"github.com/artni96/url-shortener/internal/utility"
 	"go.uber.org/zap"
 )
@@ -324,24 +325,65 @@ func (s *URLService) BulkDelete(ctx context.Context, urls []model.URLDelete) err
 }
 
 func BulkFileUpdate(s *URLService) error {
-	if s.dbRepository == nil && s.app.Cfg.FileStoragePath != "" {
-		entitiesForFile, err := s.inMemoryRepository.GetList()
+	filepath := s.app.Cfg.FileStoragePath
+
+	if s.dbRepository == nil && filepath != "" {
+		fileReader, err := usersrepo.NewFileScanner(filepath)
+		if fileReader == nil {
+			return nil
+		}
+		defer func(fileReader *usersrepo.FileScanner) {
+			err = fileReader.Close()
+			if err != nil {
+				s.app.Logger.Info("could not close file reader", zap.String("filepath", filepath))
+			}
+		}(fileReader)
+
+		if err != nil {
+			s.app.Logger.Info("could not initialize NewFileScanner",
+				zap.String("error", err.Error()))
+			return nil
+		}
+		usersForFile, err := fileReader.CollectData()
+		if err != nil {
+			s.app.Logger.Info("could not collect data from file",
+				zap.String("filepath", filepath),
+				zap.String("error", err.Error()))
+			return fmt.Errorf("could not collect data from file: %w", err)
+		}
+
+		urlsForFile, err := s.inMemoryRepository.GetList()
 		if err != nil {
 			return fmt.Errorf("failed to get url list: %w", err)
 		}
-		fileWriter, err := urlrepo.NewWriter(s.app.Cfg.FileStoragePath)
+		urlsFileWriter, err := urlrepo.NewWriter(filepath)
 		if err != nil {
 			s.app.Logger.Error("could not create file writer",
-				zap.String("path", s.app.Cfg.FileStoragePath),
+				zap.String("path", filepath),
 				zap.String("error message", err.Error()),
 			)
 			return fmt.Errorf("%w", err)
 		}
-		defer fileWriter.Close()
-		err = fileWriter.BulkWriteEntities(entitiesForFile, true)
+		defer urlsFileWriter.Close()
+		err = urlsFileWriter.BulkWriteEntities(urlsForFile, true)
 		if err != nil {
 			return fmt.Errorf("%w", err)
 		}
+
+		usersFileWriter, err := usersrepo.NewWriter(filepath)
+		if err != nil {
+			s.app.Logger.Error("could not create file writer",
+				zap.String("path", filepath),
+				zap.String("error message", err.Error()),
+			)
+			return fmt.Errorf("%w", err)
+		}
+		defer usersFileWriter.Close()
+		err = usersFileWriter.BulkWriteEntities(usersForFile, false)
+		if err != nil {
+			return fmt.Errorf("%w", err)
+		}
+
 		return nil
 	}
 	return nil

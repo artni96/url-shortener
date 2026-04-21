@@ -901,10 +901,11 @@ func TestBulkDeleteURLHandler(t *testing.T) {
 			assert.Equal(t, tt.want.contentType, w3.Result().Header.Get("Content-Type"))
 
 			for _, urlData := range shortURLListWithStatus {
+				fmt.Println(urlData)
 				w := httptest.NewRecorder()
 				req1 := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/%s", urlData.url), nil)
 				h.GetURLHandler(w, req1)
-				assert.Equal(t, urlData.status, w.Result().StatusCode)
+				assert.Equal(t, urlData.status, w.Result().StatusCode, urlData.url)
 			}
 		})
 	}

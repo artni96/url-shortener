@@ -102,6 +102,36 @@ func (w *Writer) WriteEntity(user model.User) error {
 	defer w.Close()
 	return w.writer.Flush()
 }
+func (w *Writer) BulkWriteEntities(entities []model.User, toTruncate bool) error {
+	if toTruncate {
+		err := os.Truncate(w.file.Name(), 0)
+		if err != nil {
+			return fmt.Errorf("could not truncate file at users removal: %w", err)
+		}
+	}
+
+	defer w.Close()
+	for _, entity := range entities {
+		entityForFile := model.User{
+			ID: entity.ID,
+			IP: entity.IP,
+		}
+		data, err := json.Marshal(&entityForFile)
+		if err != nil {
+			return fmt.Errorf("could not marshal entity: %w", err)
+		}
+
+		if _, err = w.writer.Write(data); err != nil {
+			return fmt.Errorf("could not write users data to file: %w", err)
+		}
+
+		if err = w.writer.WriteByte('\n'); err != nil {
+			return fmt.Errorf("could not write users data to file: %w", err)
+		}
+		defer w.Close()
+	}
+	return w.writer.Flush()
+}
 
 func (w *Writer) Close() error {
 	return w.file.Close()
