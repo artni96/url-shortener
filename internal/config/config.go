@@ -73,7 +73,7 @@ func ParseFlags() (*Config, error) {
 	if ok {
 		conf.TokenExp, err = time.ParseDuration(tokenExp)
 	} else {
-		conf.TokenExp = time.Minute * 10
+		conf.TokenExp = time.Minute * 1
 	}
 	return &conf, nil
 }

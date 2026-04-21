@@ -164,7 +164,9 @@ func (s *FileScanner) CollectData() ([]model.User, error) {
 		if err := json.Unmarshal(data, &user); err != nil {
 			return nil, fmt.Errorf("could not unmarshal object: %w", err)
 		}
-
+		if user.IP != "" && user.ID != 0 {
+			result = append(result, user)
+		}
 	}
 	return result, nil
 }
