@@ -23,3 +23,4 @@ vendor/
 .vscode
 /data/file_storage.json
 /internal/logger/shortener.log
+/shortenertest_v2-darwin-arm64

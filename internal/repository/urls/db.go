@@ -13,12 +13,14 @@ import (
 )
 
 type DBURLRepositoryInterface interface {
-	Create(ctx context.Context, url model.URLEntity) (model.URLEntity, error)
+	Create(ctx context.Context, url model.URLCreate) (model.URLEntity, error)
 	BulkCreate(ctx context.Context, urls []model.URLBulkCreate) ([]model.URLBulkCreate, error)
-	GetByShortURL(ctx context.Context, shortURL string) (string, error)
+	GetByShortURL(ctx context.Context, shortURL string) (model.GetByShortURLResponse, error)
 	GetList(ctx context.Context) ([]model.URLEntity, error)
+	GetUserList(ctx context.Context, createdBy int) ([]model.URLEntity, error)
 	Update(ctx context.Context, url model.URLEntity) (model.URLEntity, error)
 	Delete(ctx context.Context, shortURL string) error
+	BulkDelete(ctx context.Context, urls []model.URLDelete) ([]error, error)
 
 	IsURLListUnique(ctx context.Context, shortURLList []string) (bool, error)
 }
@@ -27,37 +29,41 @@ type DBURLRepository struct {
 	logger *zap.Logger
 }
 
-func (repo *DBURLRepository) Create(ctx context.Context, entity model.URLEntity) (model.URLEntity, error) {
+func (repo *DBURLRepository) Create(ctx context.Context, requestEntity model.URLCreate) (model.URLEntity, error) {
 
 	responseEntity := model.URLEntity{}
 	selectQuery := "SELECT original_url, short_url FROM urls WHERE short_url = $1"
-	err := repo.db.GetContext(ctx, &entity, selectQuery, entity.ShortURL)
+	err := repo.db.GetContext(ctx, &responseEntity, selectQuery, requestEntity.ShortURL)
 
 	if err.Error() != "sql: no rows in result set" {
 		return model.URLEntity{}, err
 	}
 
-	if entity.ShortURL != "" && entity.ShortURL != entity.ShortURL {
+	if responseEntity.ShortURL != "" && responseEntity.ShortURL != requestEntity.ShortURL {
 		return model.URLEntity{}, fmt.Errorf("%w: short url already exists", ErrShortURLAlreadyExists)
 	}
 	var uniqueConstrErr *pgconn.PgError
-	insertQuery := "INSERT INTO urls (original_url, short_url) VALUES ($1, $2)"
+	insertQuery := "INSERT INTO urls (original_url, short_url, created_by, is_deleted) VALUES ($1, $2, $3, $4)"
 
-	result, err := repo.db.ExecContext(ctx, insertQuery, entity.OriginalURL, entity.ShortURL)
+	result, err := repo.db.ExecContext(ctx, insertQuery, requestEntity.OriginalURL, requestEntity.ShortURL, requestEntity.CreatedBy, false)
 	if err != nil {
 		if errors.As(err, &uniqueConstrErr) {
-
 			selectQuery = "SELECT original_url, short_url FROM urls WHERE original_url = $1"
-			repo.db.GetContext(ctx, &responseEntity, selectQuery, entity.OriginalURL)
-
-			return responseEntity, fmt.Errorf("%w: %s", ErrOriginalURLAlreadyExists, entity.OriginalURL)
+			err = repo.db.GetContext(ctx, &responseEntity, selectQuery, requestEntity.OriginalURL)
+			if err != nil {
+				return model.URLEntity{}, fmt.Errorf("failed to insert url: %w", err)
+			}
+			return responseEntity, fmt.Errorf("%w: %s", ErrOriginalURLAlreadyExists, requestEntity.OriginalURL)
 		}
 	}
+
 	if result == nil {
 		return model.URLEntity{}, ErrURLNotCreated
 	}
-
-	return entity, nil
+	responseEntity.OriginalURL = requestEntity.OriginalURL
+	responseEntity.ShortURL = requestEntity.ShortURL
+	responseEntity.CreatedBy = requestEntity.CreatedBy
+	return responseEntity, nil
 }
 
 func (repo *DBURLRepository) BulkCreate(ctx context.Context, urls []model.URLBulkCreate) ([]model.URLBulkCreate, error) {
@@ -69,16 +75,16 @@ func (repo *DBURLRepository) BulkCreate(ctx context.Context, urls []model.URLBul
 
 	defer tx.Rollback()
 
-	query := "INSERT INTO urls (original_url, short_url) VALUES "
-	values := []interface{}{}
-	result := []model.URLBulkCreate{}
+	query := "INSERT INTO urls (original_url, short_url, created_by, is_deleted) VALUES "
+	var values []interface{}
+	var result []model.URLBulkCreate
 
 	for i, url := range urls {
 		if i > 0 {
 			query += ", "
 		}
-		query += fmt.Sprintf("($%d, $%d)", len(values)+1, len(values)+2)
-		values = append(values, url.OriginalURL, url.ShortURL)
+		query += fmt.Sprintf("($%d, $%d, $%d, $%d)", len(values)+1, len(values)+2, len(values)+3, len(values)+4)
+		values = append(values, url.OriginalURL, url.ShortURL, url.CreatedBy, false)
 		result = append(result, model.URLBulkCreate{
 			CorrelationID: url.CorrelationID,
 			ShortURL:      url.ShortURL,
@@ -98,14 +104,42 @@ func (repo *DBURLRepository) BulkCreate(ctx context.Context, urls []model.URLBul
 	return result, nil
 }
 
-func (repo *DBURLRepository) GetByShortURL(ctx context.Context, shortURL string) (string, error) {
-	var entity string
+func (repo *DBURLRepository) BulkDelete(ctx context.Context, urls []model.URLDelete) ([]error, error) {
+	doneChan := make(chan struct{})
+	defer close(doneChan)
 
-	selectQuery := "SELECT original_url FROM urls where short_url = $1"
+	inputChan := generator(doneChan, urls)
+	channels := fanOut(ctx, doneChan, inputChan, repo, len(urls))
+
+	resultChan := fanIn(doneChan, channels...)
+
+	var urlList []string
+	var errs []error
+
+	for url := range resultChan {
+		if url.Err != nil {
+			errs = append(errs, url.Err)
+		} else {
+			urlList = append(urlList, url.ShortURL)
+		}
+	}
+
+	query := "UPDATE urls SET is_deleted = TRUE WHERE short_url = ANY($1)"
+	_, err := repo.db.ExecContext(ctx, query, urlList)
+	if err != nil {
+		return errs, err
+	}
+	return errs, nil
+}
+
+func (repo *DBURLRepository) GetByShortURL(ctx context.Context, shortURL string) (model.GetByShortURLResponse, error) {
+	var entity model.GetByShortURLResponse
+
+	selectQuery := "SELECT original_url, short_url, is_deleted FROM urls where short_url = $1"
 	err := repo.db.GetContext(ctx, &entity, selectQuery, shortURL)
 
 	if err != nil {
-		return "", fmt.Errorf("%w: %s", ErrURLNotFound, shortURL)
+		return model.GetByShortURLResponse{}, fmt.Errorf("%w: %s", ErrURLNotFound, shortURL)
 	}
 	return entity, nil
 }
@@ -115,6 +149,18 @@ func (repo *DBURLRepository) GetList(ctx context.Context) ([]model.URLEntity, er
 
 	selectQuery := "SELECT original_url, short_url FROM urls"
 	err := repo.db.SelectContext(ctx, &entities, selectQuery)
+
+	if err != nil {
+		return nil, fmt.Errorf("GetList - failure to execute request: %w", err)
+	}
+	return entities, nil
+}
+
+func (repo *DBURLRepository) GetUserList(ctx context.Context, createdBy int) ([]model.URLEntity, error) {
+	var entities []model.URLEntity
+
+	selectQuery := "SELECT original_url, short_url FROM urls where created_by = $1"
+	err := repo.db.SelectContext(ctx, &entities, selectQuery, createdBy)
 
 	if err != nil {
 		return nil, fmt.Errorf("GetList - failure to execute request: %w", err)
@@ -138,11 +184,7 @@ func (repo *DBURLRepository) Update(ctx context.Context, entity model.URLEntity)
 		if errors.As(err, &uniqueConstrErr) {
 			selectQuery := "SELECT original_url, short_url FROM urls WHERE original_url = $1"
 			repo.db.GetContext(ctx, &entity, selectQuery, entity.OriginalURL)
-			return entity, fmt.Errorf("%w: %s", ErrOriginalURLAlreadyExists, model.URLEntity{
-				OriginalURL: entity.OriginalURL,
-				ShortURL:    entity.ShortURL,
-			},
-			)
+			return entity, fmt.Errorf("%w: original url: %s, short url: %s", ErrOriginalURLAlreadyExists, entity.OriginalURL, entity.ShortURL)
 		}
 		return updatedEntity, fmt.Errorf("%w", fmt.Errorf("failed to update url entity: %w", err))
 	}

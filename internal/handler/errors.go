@@ -1,4 +1,4 @@
-package urls
+package handler
 
 import (
 	"encoding/json"

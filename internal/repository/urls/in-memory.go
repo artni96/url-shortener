@@ -14,38 +14,48 @@ import (
 )
 
 type InMemoryURLRepositoryInterface interface {
-	Create(entity model.URLEntity) (model.URLEntity, error)
+	Create(entity model.URLCreate) (model.URLEntity, error)
 	BulkCreate(originalURLs []model.URLBulkCreate) ([]model.URLBulkCreate, error)
-	GetByShortURL(shortURL string) (string, error)
+	GetByShortURL(shortURL string) (model.GetByShortURLResponse, error)
 	GetList() ([]model.URLEntity, error)
+	GetUserList(createdBy int) ([]model.URLEntity, error)
+
 	Update(model.URLEntity) (model.URLEntity, error)
 	Delete(shortURL string) error
+	BulkDelete(urls []model.URLDelete) ([]error, error)
 
 	IsURLListUnique(shortURLList []string) (bool, error)
 	UploadInMemoryStorage(url model.URLEntity) error
 }
 type InMemoryURLRepository struct {
 	mu     sync.RWMutex
-	urls   map[string]string
+	urls   map[string]model.URLNestedData
 	logger *zap.Logger
 }
 
-func (repo *InMemoryURLRepository) Create(entity model.URLEntity) (model.URLEntity, error) {
+func (repo *InMemoryURLRepository) Create(entity model.URLCreate) (model.URLEntity, error) {
 	repo.mu.Lock()
 	defer repo.mu.Unlock()
+	responseEntity := model.URLEntity{}
 
 	if _, ok := repo.urls[entity.OriginalURL]; ok {
-		return model.URLEntity{}, ErrShortURLAlreadyExists
+		return responseEntity, ErrShortURLAlreadyExists
 	}
 
+	responseEntity.ShortURL = entity.ShortURL
+	responseEntity.OriginalURL = entity.OriginalURL
+	responseEntity.CreatedBy = entity.CreatedBy
 	for _, url := range repo.urls {
-		if url == entity.OriginalURL {
-			return entity, ErrOriginalURLAlreadyExists
+		if url.OriginalURL == entity.OriginalURL {
+			return responseEntity, ErrOriginalURLAlreadyExists
 		}
 	}
 
-	repo.urls[entity.ShortURL] = entity.OriginalURL
-	return entity, nil
+	repo.urls[entity.ShortURL] = model.URLNestedData{
+		OriginalURL: entity.OriginalURL,
+		CreatedBy:   entity.CreatedBy,
+	}
+	return responseEntity, nil
 }
 
 func (repo *InMemoryURLRepository) BulkCreate(urls []model.URLBulkCreate) ([]model.URLBulkCreate, error) {
@@ -71,11 +81,15 @@ func (repo *InMemoryURLRepository) BulkCreate(urls []model.URLBulkCreate) ([]mod
 	}
 
 	for _, url := range urls {
-		repo.urls[url.ShortURL] = url.OriginalURL
+		repo.urls[url.ShortURL] = model.URLNestedData{
+			OriginalURL: url.OriginalURL,
+			CreatedBy:   url.CreatedBy,
+		}
 		entity := model.URLBulkCreate{
 			CorrelationID: url.CorrelationID,
 			ShortURL:      url.ShortURL,
 			OriginalURL:   url.OriginalURL,
+			CreatedBy:     url.CreatedBy,
 		}
 		result = append(result, entity)
 	}
@@ -83,17 +97,21 @@ func (repo *InMemoryURLRepository) BulkCreate(urls []model.URLBulkCreate) ([]mod
 	return result, nil
 }
 
-func (repo *InMemoryURLRepository) GetByShortURL(shortURL string) (string, error) {
+func (repo *InMemoryURLRepository) GetByShortURL(shortURL string) (model.GetByShortURLResponse, error) {
 	repo.mu.RLock()
 	defer repo.mu.RUnlock()
-	var entity string
+	var entity model.URLNestedData
 
 	entity, ok := repo.urls[shortURL]
 	if !ok {
-		return "", ErrURLNotFound
+		return model.GetByShortURLResponse{}, ErrURLNotFound
 	}
 
-	return entity, nil
+	return model.GetByShortURLResponse{
+		OriginalURL: entity.OriginalURL,
+		ShortURL:    shortURL,
+		IsDeleted:   entity.IsDeleted,
+	}, nil
 }
 
 func (repo *InMemoryURLRepository) GetList() ([]model.URLEntity, error) {
@@ -101,8 +119,21 @@ func (repo *InMemoryURLRepository) GetList() ([]model.URLEntity, error) {
 	defer repo.mu.RUnlock()
 	var entities []model.URLEntity
 
-	for shortURL, originalURL := range repo.urls {
-		entities = append(entities, model.URLEntity{OriginalURL: originalURL, ShortURL: shortURL})
+	for shortURL, data := range repo.urls {
+		entities = append(entities, model.URLEntity{OriginalURL: data.OriginalURL, ShortURL: shortURL, CreatedBy: data.CreatedBy, IsDeleted: data.IsDeleted})
+	}
+	return entities, nil
+}
+
+func (repo *InMemoryURLRepository) GetUserList(createdBy int) ([]model.URLEntity, error) {
+	repo.mu.RLock()
+	defer repo.mu.RUnlock()
+	var entities []model.URLEntity
+
+	for shortURL, data := range repo.urls {
+		if data.CreatedBy == createdBy {
+			entities = append(entities, model.URLEntity{OriginalURL: data.OriginalURL, ShortURL: shortURL, CreatedBy: data.CreatedBy, IsDeleted: data.IsDeleted})
+		}
 	}
 	return entities, nil
 }
@@ -113,15 +144,18 @@ func (repo *InMemoryURLRepository) Update(entity model.URLEntity) (model.URLEnti
 
 	updatedEntity := model.URLEntity{}
 
-	for _, originalURL := range repo.urls {
-		if originalURL == entity.OriginalURL {
+	for _, data := range repo.urls {
+		if data.OriginalURL == entity.OriginalURL {
 			return updatedEntity, ErrOriginalURLAlreadyExists
 		}
 	}
 
 	for dbShortURL := range repo.urls {
 		if dbShortURL == entity.ShortURL {
-			repo.urls[dbShortURL] = entity.OriginalURL
+			repo.urls[dbShortURL] = model.URLNestedData{
+				OriginalURL: entity.OriginalURL,
+				CreatedBy:   -1,
+			}
 			updatedEntity.OriginalURL = entity.OriginalURL
 			updatedEntity.ShortURL = entity.ShortURL
 			return updatedEntity, nil
@@ -143,6 +177,27 @@ func (repo *InMemoryURLRepository) Delete(shortURL string) error {
 	return fmt.Errorf("%w", ErrURLNotFound)
 }
 
+func (repo *InMemoryURLRepository) BulkDelete(urls []model.URLDelete) ([]error, error) {
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
+
+	var errs []error
+
+	for _, url := range urls {
+		urlData, ok := repo.urls[url.ShortURL]
+		if !ok {
+			errs = append(errs, fmt.Errorf("%w, short url: %s", ErrURLNotFound, url.ShortURL))
+		} else if urlData.CreatedBy != url.CreatedBy {
+			errs = append(errs, fmt.Errorf("%w: url author id: %d, request user id: %d", ErrUserIsNotAuthor, urlData.CreatedBy, url.CreatedBy))
+		} else {
+			urlData.IsDeleted = true
+			repo.urls[url.ShortURL] = urlData
+		}
+	}
+
+	return errs, nil
+}
+
 func (repo *InMemoryURLRepository) IsURLListUnique(shortURLList []string) (bool, error) {
 	for _, shortURL := range shortURLList {
 		if _, ok := repo.urls[shortURL]; ok {
@@ -160,7 +215,11 @@ func (repo *InMemoryURLRepository) UploadInMemoryStorage(urlEntity model.URLEnti
 	if ok {
 		return fmt.Errorf("%w: %s", ErrShortURLAlreadyExists, urlEntity.ShortURL)
 	}
-	repo.urls[urlEntity.ShortURL] = urlEntity.OriginalURL
+	repo.urls[urlEntity.ShortURL] = model.URLNestedData{
+		OriginalURL: urlEntity.OriginalURL,
+		CreatedBy:   urlEntity.CreatedBy,
+		IsDeleted:   urlEntity.IsDeleted,
+	}
 	return nil
 }
 
@@ -207,6 +266,8 @@ func (w *Writer) BulkWriteEntities(entities []model.URLEntity, toTruncate bool) 
 		entityForFile := model.URLEntity{
 			OriginalURL: entity.OriginalURL,
 			ShortURL:    entity.ShortURL,
+			CreatedBy:   entity.CreatedBy,
+			IsDeleted:   entity.IsDeleted,
 		}
 		data, err := json.Marshal(&entityForFile)
 		if err != nil {
@@ -214,11 +275,11 @@ func (w *Writer) BulkWriteEntities(entities []model.URLEntity, toTruncate bool) 
 		}
 
 		if _, err = w.writer.Write(data); err != nil {
-			return fmt.Errorf("could not write to file: %w", err)
+			return fmt.Errorf("could not write urls data to file: %w", err)
 		}
 
 		if err = w.writer.WriteByte('\n'); err != nil {
-			return fmt.Errorf("could not write to file: %w", err)
+			return fmt.Errorf("could not write urls data to file: %w", err)
 		}
 		defer w.Close()
 	}
@@ -256,7 +317,10 @@ func (s *FileScanner) CollectData() ([]model.URLEntity, error) {
 		if err := json.Unmarshal(data, &object); err != nil {
 			return nil, fmt.Errorf("could not unmarshal object: %w", err)
 		}
-		result = append(result, object)
+		if object.ShortURL != "" && object.OriginalURL != "" {
+			result = append(result, object)
+		}
+
 	}
 	return result, nil
 }
@@ -316,7 +380,7 @@ func (repo *InMemoryURLRepository) uploadInMemoryStorage(filepath string) error 
 
 func NewInMemoryURLRepository(app *config.App) (*InMemoryURLRepository, error) {
 	repo := InMemoryURLRepository{
-		urls:   make(map[string]string),
+		urls:   make(map[string]model.URLNestedData),
 		logger: app.Logger,
 	}
 
