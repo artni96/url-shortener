@@ -2,14 +2,20 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"os/signal"
+	"strings"
+	"time"
 
 	"github.com/artni96/url-shortener/internal/config"
 	"github.com/artni96/url-shortener/internal/config/db"
 	"github.com/artni96/url-shortener/internal/handler/healthcheck"
 	"github.com/artni96/url-shortener/internal/handler/urls"
 	"github.com/artni96/url-shortener/internal/logger"
+	"github.com/artni96/url-shortener/internal/model"
 	urlrepo "github.com/artni96/url-shortener/internal/repository/urls"
 	authrepo "github.com/artni96/url-shortener/internal/repository/users"
 	"github.com/artni96/url-shortener/internal/service"
@@ -20,11 +26,13 @@ import (
 func run(cfg *config.Config) error {
 	ctx := context.Background()
 	appLogger, err := logger.InitLogger(cfg.DebugLevel)
+	auditChan := make(chan model.AuditEntity, 100)
 
 	app := &config.App{
-		DB:     nil,
-		Cfg:    cfg,
-		Logger: appLogger,
+		DB:        nil,
+		Cfg:       cfg,
+		Logger:    appLogger,
+		AuditChan: auditChan,
 	}
 
 	DBCon, err := db.InitDBConnection(ctx, app)
@@ -78,5 +86,84 @@ func run(cfg *config.Config) error {
 	appLogger.Info("Starting server",
 		zap.String("server address", app.Cfg.ServerAddress),
 	)
-	return http.ListenAndServe(app.Cfg.ServerAddress, mainRouter)
+
+	newServer := &http.Server{
+		Addr:    app.Cfg.ServerAddress,
+		Handler: mainRouter,
+	}
+
+	gsPeriod := time.Second * 5
+	gsCtx, gsCancel := context.WithTimeout(ctx, gsPeriod)
+	defer gsCancel()
+
+	go func() {
+		for i := range auditChan {
+			auditFile := cfg.AuditFile
+			if auditFile != "" {
+				fileWriter, err := urlrepo.NewAuditWriter(auditFile)
+				if err != nil {
+					app.Logger.Error("failed to initialize file writer", zap.Error(err))
+				}
+				err = fileWriter.WriteAuditEntity(i)
+				if err != nil {
+					app.Logger.Error("failed to write audit entity", zap.Error(err))
+				}
+				defer fileWriter.Close()
+			}
+			auditURL := cfg.AuditURL
+			if auditURL != "" {
+				client := &http.Client{
+					Timeout: 10 * time.Second,
+				}
+				byteBody, err := json.Marshal(i)
+				if err != nil {
+					app.Logger.Error("failed to marshal audit entity", zap.Error(err))
+				}
+				stringBody := strings.NewReader(string(byteBody))
+				req, err := http.NewRequest("POST", auditURL, stringBody)
+				req.Header.Set("Content-Type", "application/json")
+
+				resp, err := client.Do(req)
+				if err != nil {
+					app.Logger.Error("failed to send audit entity", zap.Error(err))
+				}
+				defer resp.Body.Close()
+
+			}
+		}
+	}()
+	go func() {
+		err = newServer.ListenAndServe()
+		if err != nil {
+			app.Logger.Fatal("failed to start server", zap.Error(err))
+		}
+	}()
+
+	shutdownChan := make(chan os.Signal, 1)
+	signal.Notify(shutdownChan, os.Interrupt)
+	<-shutdownChan
+	app.Logger.Info("shutting app down", zap.Time("time", time.Now()))
+	go func() {
+		deadline, _ := gsCtx.Deadline()
+		for i := deadline.Second() - time.Now().Second(); i > 0; i-- {
+			app.Logger.Info(fmt.Sprintf("app shutdown in %d sec", i))
+			time.Sleep(1 * time.Second)
+		}
+	}()
+	select {
+	case <-gsCtx.Done():
+		if err = app.DB.Close(); err != nil {
+			app.Logger.Info("failed to close database", zap.Error(err))
+		} else {
+			app.Logger.Info("database connection closed gracefully ")
+		}
+	}
+
+	if err = newServer.Shutdown(gsCtx); err != nil {
+		app.Logger.Info("failed to shutdown server", zap.Error(err))
+	} else {
+		app.Logger.Info("server stopped gracefully")
+	}
+	app.Logger.Info("app stopped gracefully")
+	return nil
 }

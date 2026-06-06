@@ -34,6 +34,7 @@ type URLHandler struct {
 	logger         *zap.Logger
 	ctx            *context.Context
 	cfg            *config.Config
+	auditChan      chan<- model.AuditEntity
 }
 
 func NewURLHandler(ctx *context.Context, app *config.App, urlService service.URLServiceInterface, userService service.UserServiceInterface, cfg *config.Config) *URLHandler {
@@ -44,6 +45,7 @@ func NewURLHandler(ctx *context.Context, app *config.App, urlService service.URL
 		logger:         app.Logger,
 		ctx:            ctx,
 		cfg:            cfg,
+		auditChan:      app.AuditChan,
 	}
 }
 
@@ -78,6 +80,15 @@ func (h *URLHandler) ShortenURLHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	shortURL, err := h.urlService.Create(*h.ctx, body, h.responseDomain)
+
+	auditEntity := model.AuditEntity{
+		Ts:     time.Now().Unix(),
+		URL:    body.OriginalURL,
+		UserID: userID,
+		Action: "shorten",
+	}
+	h.auditChan <- auditEntity
+
 	responseData.Result = shortURL
 	w.Header().Set("Content-Type", "application/json")
 
@@ -198,6 +209,15 @@ func (h *URLHandler) CreateURLHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	entity.CreatedBy = userID
 	shortURL, err := h.urlService.Create(*h.ctx, entity, h.responseDomain)
+
+	auditEntity := model.AuditEntity{
+		Ts:     time.Now().Unix(),
+		URL:    urlStr,
+		UserID: userID,
+		Action: "shorten",
+	}
+	h.auditChan <- auditEntity
+
 	w.Header().Set("Content-Type", "text/plain")
 	if err != nil {
 		if errors.Is(err, urls.ErrOriginalURLAlreadyExists) {
@@ -232,6 +252,14 @@ func (h *URLHandler) GetURLHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusGone)
 		return
 	}
+
+	auditEntity := model.AuditEntity{
+		Ts:     time.Now().Unix(),
+		URL:    entity.OriginalURL,
+		Action: "shorten",
+	}
+	h.auditChan <- auditEntity
+
 	w.Header().Set("Content-Type", "text/plain")
 	w.Header().Set("Location", entity.OriginalURL)
 	w.WriteHeader(http.StatusTemporaryRedirect)
