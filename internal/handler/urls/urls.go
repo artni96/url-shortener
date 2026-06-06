@@ -210,13 +210,13 @@ func (h *URLHandler) CreateURLHandler(w http.ResponseWriter, r *http.Request) {
 	entity.CreatedBy = userID
 	shortURL, err := h.urlService.Create(*h.ctx, entity, h.responseDomain)
 
-	auditEntity := model.AuditEntity{
-		Ts:     time.Now().Unix(),
-		URL:    urlStr,
-		UserID: userID,
-		Action: "shorten",
-	}
-	h.auditChan <- auditEntity
+	//auditEntity := model.AuditEntity{
+	//	Ts:     time.Now().Unix(),
+	//	URL:    urlStr,
+	//	UserID: userID,
+	//	Action: "shorten",
+	//}
+	//h.auditChan <- auditEntity
 
 	w.Header().Set("Content-Type", "text/plain")
 	if err != nil {
@@ -253,12 +253,12 @@ func (h *URLHandler) GetURLHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	auditEntity := model.AuditEntity{
-		Ts:     time.Now().Unix(),
-		URL:    entity.OriginalURL,
-		Action: "shorten",
-	}
-	h.auditChan <- auditEntity
+	//auditEntity := model.AuditEntity{
+	//	Ts:     time.Now().Unix(),
+	//	URL:    entity.OriginalURL,
+	//	Action: "shorten",
+	//}
+	//h.auditChan <- auditEntity
 
 	w.Header().Set("Content-Type", "text/plain")
 	w.Header().Set("Location", entity.OriginalURL)

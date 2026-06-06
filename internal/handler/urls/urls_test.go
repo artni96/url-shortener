@@ -39,10 +39,13 @@ func testHandler(t *testing.T) *URLHandler {
 		SecretKey:       "dontshareme",
 	}
 
+	auditChan := make(chan model.AuditEntity, 10)
+
 	app := config.App{
-		DB:     nil,
-		Cfg:    &cfg,
-		Logger: testLogger,
+		DB:        nil,
+		Cfg:       &cfg,
+		Logger:    testLogger,
+		AuditChan: auditChan,
 	}
 
 	testDB, err := db.InitDBConnection(ctx, &app)
@@ -58,6 +61,7 @@ func testHandler(t *testing.T) *URLHandler {
 	urlService := service.NewURLService(nil, urlInMemoryRepository, &app)
 	userService := service.NewUserService(nil, userInMemoryRepository, &app)
 	h := NewURLHandler(&ctx, &app, urlService, userService, &cfg)
+
 	return h
 }
 

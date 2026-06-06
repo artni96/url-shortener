@@ -142,6 +142,8 @@ func run(cfg *config.Config) error {
 	shutdownChan := make(chan os.Signal, 1)
 	signal.Notify(shutdownChan, os.Interrupt)
 	<-shutdownChan
+	close(shutdownChan)
+
 	app.Logger.Info("shutting app down", zap.Time("time", time.Now()))
 	go func() {
 		deadline, _ := gsCtx.Deadline()
