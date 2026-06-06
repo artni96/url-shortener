@@ -2,12 +2,10 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"time"
 
 	"github.com/artni96/url-shortener/internal/config"
@@ -96,42 +94,48 @@ func run(cfg *config.Config) error {
 	gsCtx, gsCancel := context.WithTimeout(ctx, gsPeriod)
 	defer gsCancel()
 
-	go func() {
-		for i := range auditChan {
-			auditFile := cfg.AuditFile
-			if auditFile != "" {
-				fileWriter, err := urlrepo.NewAuditWriter(auditFile)
-				if err != nil {
-					app.Logger.Error("failed to initialize file writer", zap.Error(err))
-				}
-				err = fileWriter.WriteAuditEntity(i)
-				if err != nil {
-					app.Logger.Error("failed to write audit entity", zap.Error(err))
-				}
-				defer fileWriter.Close()
-			}
-			auditURL := cfg.AuditURL
-			if auditURL != "" {
-				client := &http.Client{
-					Timeout: 10 * time.Second,
-				}
-				byteBody, err := json.Marshal(i)
-				if err != nil {
-					app.Logger.Error("failed to marshal audit entity", zap.Error(err))
-				}
-				stringBody := strings.NewReader(string(byteBody))
-				req, err := http.NewRequest("POST", auditURL, stringBody)
-				req.Header.Set("Content-Type", "application/json")
+	go service.RunAudit(app)
 
-				resp, err := client.Do(req)
-				if err != nil {
-					app.Logger.Error("failed to send audit entity", zap.Error(err))
-				}
-				defer resp.Body.Close()
+	//for i := range auditChan {
+	//	go func() {
+	//		auditFile := cfg.AuditFile
+	//		if auditFile != "" {
+	//			go func() {
+	//				fileWriter, err := urlrepo.NewAuditWriter(auditFile)
+	//				if err != nil {
+	//					app.Logger.Error("failed to initialize file writer", zap.Error(err))
+	//				}
+	//				err = fileWriter.WriteAuditEntity(i)
+	//				if err != nil {
+	//					app.Logger.Error("failed to write audit entity", zap.Error(err))
+	//				}
+	//				defer fileWriter.Close()
+	//			}()
+	//		}
+	//		auditURL := cfg.AuditURL
+	//		if auditURL != "" {
+	//			go func() {
+	//				client := &http.Client{
+	//					Timeout: 10 * time.Second,
+	//				}
+	//				byteBody, err := json.Marshal(i)
+	//				if err != nil {
+	//					app.Logger.Error("failed to marshal audit entity", zap.Error(err))
+	//				}
+	//				stringBody := strings.NewReader(string(byteBody))
+	//				req, err := http.NewRequest("POST", auditURL, stringBody)
+	//				req.Header.Set("Content-Type", "application/json")
+	//
+	//				resp, err := client.Do(req)
+	//				if err != nil {
+	//					app.Logger.Error("failed to send audit entity", zap.Error(err))
+	//				}
+	//				defer resp.Body.Close()
+	//			}()
+	//		}
+	//	}()
+	//}
 
-			}
-		}
-	}()
 	go func() {
 		err = newServer.ListenAndServe()
 		if err != nil {

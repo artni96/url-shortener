@@ -5,19 +5,28 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sync"
 
 	"github.com/artni96/url-shortener/internal/model"
 )
 
-func NewAuditWriter(filename string) (*Writer, error) {
+type AuditWriter struct {
+	file   *os.File
+	writer *bufio.Writer
+	mu     sync.Mutex
+}
+
+func NewAuditWriter(filename string) (*AuditWriter, error) {
 	file, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return nil, fmt.Errorf("could open file: %w", err)
 	}
-	return &Writer{file: file, writer: bufio.NewWriter(file)}, nil
+	return &AuditWriter{file: file, writer: bufio.NewWriter(file)}, nil
 }
 
-func (w *Writer) WriteAuditEntity(entity model.AuditEntity) error {
+func (w *AuditWriter) WriteAuditEntity(entity model.AuditEntity) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	data, err := json.Marshal(&entity)
 	if err != nil {
 		return fmt.Errorf("could not marshal entity: %w", err)
@@ -32,4 +41,8 @@ func (w *Writer) WriteAuditEntity(entity model.AuditEntity) error {
 	}
 	defer w.Close()
 	return w.writer.Flush()
+}
+
+func (w *AuditWriter) Close() error {
+	return w.file.Close()
 }
