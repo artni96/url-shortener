@@ -81,6 +81,10 @@ func run(cfg *config.Config) error {
 	mainRouter.Mount("/", urlRouter)
 	mainRouter.Mount("/ping", healthRouter)
 
+	mainRouter.HandleFunc("/debug/pprof/*", func(w http.ResponseWriter, r *http.Request) {
+		http.DefaultServeMux.ServeHTTP(w, r)
+	})
+
 	appLogger.Info("Starting server",
 		zap.String("server address", app.Cfg.ServerAddress),
 	)

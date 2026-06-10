@@ -17,7 +17,7 @@ func GenerateShortURL(length int) (string, error) {
 }
 
 func BulkGenerateShortURL(amount int, length int) ([]string, error) {
-	var result []string
+	result := make([]string, 0, amount)
 	for range amount {
 		shortURL, err := GenerateShortURL(length)
 		if err != nil {
