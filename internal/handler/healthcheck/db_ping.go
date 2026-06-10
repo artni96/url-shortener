@@ -4,14 +4,15 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/artni96/url-shortener/internal/config"
-	"github.com/artni96/url-shortener/internal/handler/middlewares"
-	"github.com/artni96/url-shortener/internal/logger"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
 	"go.uber.org/zap"
+
+	"github.com/artni96/url-shortener/internal/config"
+	"github.com/artni96/url-shortener/internal/handler/middlewares"
+	"github.com/artni96/url-shortener/internal/logger"
 )
 
 type Handler struct {

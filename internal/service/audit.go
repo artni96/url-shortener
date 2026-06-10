@@ -7,9 +7,10 @@ import (
 	"sync"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/artni96/url-shortener/internal/config"
 	urlrepo "github.com/artni96/url-shortener/internal/repository/urls"
-	"go.uber.org/zap"
 )
 
 type Semaphore struct {

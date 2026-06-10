@@ -5,12 +5,13 @@ import (
 	"errors"
 	"fmt"
 
+	"go.uber.org/zap"
+
 	"github.com/artni96/url-shortener/internal/config"
 	"github.com/artni96/url-shortener/internal/model"
 	urlrepo "github.com/artni96/url-shortener/internal/repository/urls"
 	usersrepo "github.com/artni96/url-shortener/internal/repository/users"
 	"github.com/artni96/url-shortener/internal/utility"
-	"go.uber.org/zap"
 )
 
 var ErrFailedToCreated = errors.New("could not create ShortURL")

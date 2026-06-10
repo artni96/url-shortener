@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/golang-jwt/jwt/v4"
+	"go.uber.org/zap"
+
 	"github.com/artni96/url-shortener/internal/config"
 	"github.com/artni96/url-shortener/internal/model"
 	"github.com/artni96/url-shortener/internal/repository/users"
-	"github.com/golang-jwt/jwt/v4"
-	"go.uber.org/zap"
 )
 
 type UserServiceInterface interface {

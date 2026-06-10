@@ -8,6 +8,9 @@ import (
 	"os/signal"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+	"go.uber.org/zap"
+
 	"github.com/artni96/url-shortener/internal/config"
 	"github.com/artni96/url-shortener/internal/config/db"
 	"github.com/artni96/url-shortener/internal/handler/healthcheck"
@@ -17,8 +20,6 @@ import (
 	urlrepo "github.com/artni96/url-shortener/internal/repository/urls"
 	authrepo "github.com/artni96/url-shortener/internal/repository/users"
 	"github.com/artni96/url-shortener/internal/service"
-	"github.com/go-chi/chi/v5"
-	"go.uber.org/zap"
 )
 
 func run(cfg *config.Config) error {

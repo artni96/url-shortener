@@ -6,12 +6,13 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/artni96/url-shortener/internal/config"
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jmoiron/sqlx"
 	"go.uber.org/zap"
+
+	"github.com/artni96/url-shortener/internal/config"
 )
 
 func InitDBConnection(ctx context.Context, app *config.App) (*sqlx.DB, error) {

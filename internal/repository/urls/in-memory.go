@@ -8,9 +8,10 @@ import (
 	"os"
 	"sync"
 
+	"go.uber.org/zap"
+
 	"github.com/artni96/url-shortener/internal/config"
 	"github.com/artni96/url-shortener/internal/model"
-	"go.uber.org/zap"
 )
 
 type InMemoryURLRepositoryInterface interface {

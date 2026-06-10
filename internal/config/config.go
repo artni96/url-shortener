@@ -6,10 +6,11 @@ import (
 	"os"
 	"time"
 
-	"github.com/artni96/url-shortener/internal/model"
 	"github.com/jmoiron/sqlx"
 	"github.com/joho/godotenv"
 	"go.uber.org/zap"
+
+	"github.com/artni96/url-shortener/internal/model"
 )
 
 type Config struct {

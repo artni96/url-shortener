@@ -13,6 +13,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+	"go.uber.org/zap"
+
 	"github.com/artni96/url-shortener/internal/config"
 	"github.com/artni96/url-shortener/internal/handler"
 	"github.com/artni96/url-shortener/internal/handler/middlewares"
@@ -20,9 +24,6 @@ import (
 	"github.com/artni96/url-shortener/internal/model"
 	"github.com/artni96/url-shortener/internal/repository/urls"
 	"github.com/artni96/url-shortener/internal/service"
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
-	"go.uber.org/zap"
 )
 
 const urlPattern = `^https?:\/\/`

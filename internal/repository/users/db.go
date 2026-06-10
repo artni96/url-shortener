@@ -4,10 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/artni96/url-shortener/internal/config"
-	"github.com/artni96/url-shortener/internal/model"
 	"github.com/jmoiron/sqlx"
 	"go.uber.org/zap"
+
+	"github.com/artni96/url-shortener/internal/config"
+	"github.com/artni96/url-shortener/internal/model"
 )
 
 type DBUserRepositoryInterface interface {

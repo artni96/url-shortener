@@ -12,13 +12,14 @@ import (
 	"testing"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/artni96/url-shortener/internal/config"
 	"github.com/artni96/url-shortener/internal/config/db"
 	"github.com/artni96/url-shortener/internal/model"
 	"github.com/artni96/url-shortener/internal/repository/urls"
 	"github.com/artni96/url-shortener/internal/repository/users"
 	"github.com/artni96/url-shortener/internal/service"
-	"go.uber.org/zap"
 )
 
 func URLTestBenchHandler(b *testing.B) *URLHandler {

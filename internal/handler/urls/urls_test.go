@@ -13,6 +13,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"go.uber.org/zap"
+
 	"github.com/artni96/url-shortener/internal/config"
 	"github.com/artni96/url-shortener/internal/config/db"
 	"github.com/artni96/url-shortener/internal/model"
@@ -20,8 +23,6 @@ import (
 	"github.com/artni96/url-shortener/internal/repository/users"
 	"github.com/artni96/url-shortener/internal/service"
 	"github.com/artni96/url-shortener/internal/utility"
-	"github.com/stretchr/testify/assert"
-	"go.uber.org/zap"
 )
 
 func URLTestHandler(t *testing.T) *URLHandler {

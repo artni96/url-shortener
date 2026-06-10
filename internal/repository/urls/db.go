@@ -5,11 +5,12 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/artni96/url-shortener/internal/config"
-	"github.com/artni96/url-shortener/internal/model"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jmoiron/sqlx"
 	"go.uber.org/zap"
+
+	"github.com/artni96/url-shortener/internal/config"
+	"github.com/artni96/url-shortener/internal/model"
 )
 
 type DBURLRepositoryInterface interface {
