@@ -13,23 +13,36 @@ import (
 	"github.com/artni96/url-shortener/internal/model"
 )
 
+// DBURLRepositoryInterface encapsulates the logic to handle URL entities via database management system (Postgres).
 type DBURLRepositoryInterface interface {
+	// Create saves a new URL entity.
 	Create(ctx context.Context, url model.URLCreate) (model.URLEntity, error)
+	// BulkCreate saves several URL entities by one commit.
 	BulkCreate(ctx context.Context, urls []model.URLBulkCreate) ([]model.URLBulkCreate, error)
+	// GetByShortURL returns a URL entity with original URL value by its short URL.
 	GetByShortURL(ctx context.Context, shortURL string) (model.GetByShortURLResponse, error)
+	// GetList returns the list of all URL entities.
 	GetList(ctx context.Context) ([]model.URLEntity, error)
+	// GetUserList returns the list of user's URL entities.
 	GetUserList(ctx context.Context, createdBy int) ([]model.URLEntity, error)
+	// Update saves the changes of a URL entity gotten by its short URL.
 	Update(ctx context.Context, url model.URLEntity) (model.URLEntity, error)
+	// Delete removes a URL entity by its short URL value.
 	Delete(ctx context.Context, shortURL string) error
+	// BulkDelete removes several URL entities by one commit.
 	BulkDelete(ctx context.Context, urls []model.URLDelete) ([]error, error)
 
+	// IsURLListUnique checks whether the whole list of generated short URL values is unique.
 	IsURLListUnique(ctx context.Context, shortURLList []string) (bool, error)
 }
+
+// DBURLRepository is an object to manipulate URL data via database management system (Postgres).
 type DBURLRepository struct {
 	db     *sqlx.DB
 	logger *zap.Logger
 }
 
+// Create saves a new URL entity. It returns a URLEntity object.
 func (repo *DBURLRepository) Create(ctx context.Context, requestEntity model.URLCreate) (model.URLEntity, error) {
 
 	responseEntity := model.URLEntity{}
@@ -67,6 +80,7 @@ func (repo *DBURLRepository) Create(ctx context.Context, requestEntity model.URL
 	return responseEntity, nil
 }
 
+// BulkCreate saves several URL entities by one commit. It returns created URLBulkCreate entities.
 func (repo *DBURLRepository) BulkCreate(ctx context.Context, urls []model.URLBulkCreate) ([]model.URLBulkCreate, error) {
 
 	tx, err := repo.db.BeginTxx(ctx, nil)
@@ -105,6 +119,8 @@ func (repo *DBURLRepository) BulkCreate(ctx context.Context, urls []model.URLBul
 	return result, nil
 }
 
+// BulkDelete removes several URL entities by one commit.
+// It returns a slice of errors - error at removing an exact URL entity.
 func (repo *DBURLRepository) BulkDelete(ctx context.Context, urls []model.URLDelete) ([]error, error) {
 	doneChan := make(chan struct{})
 	defer close(doneChan)
@@ -133,6 +149,7 @@ func (repo *DBURLRepository) BulkDelete(ctx context.Context, urls []model.URLDel
 	return errs, nil
 }
 
+// GetByShortURL returns a URL entity with original URL value by its short URL.
 func (repo *DBURLRepository) GetByShortURL(ctx context.Context, shortURL string) (model.GetByShortURLResponse, error) {
 	var entity model.GetByShortURLResponse
 
@@ -145,6 +162,7 @@ func (repo *DBURLRepository) GetByShortURL(ctx context.Context, shortURL string)
 	return entity, nil
 }
 
+// GetList returns the list of all URL entities.
 func (repo *DBURLRepository) GetList(ctx context.Context) ([]model.URLEntity, error) {
 	var entities []model.URLEntity
 
@@ -157,6 +175,7 @@ func (repo *DBURLRepository) GetList(ctx context.Context) ([]model.URLEntity, er
 	return entities, nil
 }
 
+// GetUserList returns the list of user's URL entities.
 func (repo *DBURLRepository) GetUserList(ctx context.Context, createdBy int) ([]model.URLEntity, error) {
 	var entities []model.URLEntity
 
@@ -169,6 +188,7 @@ func (repo *DBURLRepository) GetUserList(ctx context.Context, createdBy int) ([]
 	return entities, nil
 }
 
+// Update saves the changes of a URL entity gotten by its short URL.
 func (repo *DBURLRepository) Update(ctx context.Context, entity model.URLEntity) (model.URLEntity, error) {
 	updatedEntity := model.URLEntity{}
 
@@ -199,6 +219,7 @@ func (repo *DBURLRepository) Update(ctx context.Context, entity model.URLEntity)
 	return updatedEntity, nil
 }
 
+// Delete removes a URL entity by its short URL value.
 func (repo *DBURLRepository) Delete(ctx context.Context, shortURL string) error {
 	query := "DELETE FROM urls WHERE short_url = $1"
 	stmt, err := repo.db.PrepareContext(ctx, query)
@@ -223,6 +244,7 @@ func (repo *DBURLRepository) Delete(ctx context.Context, shortURL string) error 
 	return nil
 }
 
+// IsURLListUnique checks whether the whole list of generated short URL values is unique.
 func (repo *DBURLRepository) IsURLListUnique(ctx context.Context, shortURLList []string) (bool, error) {
 	query := "SELECT original_url FROM urls WHERE short_url IN ($1)"
 	stmt, err := repo.db.PrepareContext(ctx, query)
@@ -239,6 +261,7 @@ func (repo *DBURLRepository) IsURLListUnique(ctx context.Context, shortURLList [
 	return true, nil
 }
 
+// NewDBURLRepository returns a new DBURLRepository.
 func NewDBURLRepository(app *config.App) (*DBURLRepository, error) {
 	return &DBURLRepository{
 		db:     app.DB,

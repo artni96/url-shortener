@@ -13,19 +13,26 @@ import (
 	"github.com/artni96/url-shortener/internal/repository/users"
 )
 
+// UserServiceInterface encapsulates usecase logic for User entities.
 type UserServiceInterface interface {
+	// Create saves a new User entity.
 	Create(ctx context.Context, ip string) (model.User, error)
+	// Login registers and provides user's auth token.
 	Login(userID int, cfg *config.Config) (string, error)
+	// GetByIP returns a User entity by its IP.
 	GetByIP(ctx context.Context, ip string) (int, error)
 
 	BuildJWTString(userID int, cfg *config.Config) (string, error)
 }
+
+// UserService is an object to manipulate User data from different sources (DB or/else file).
 type UserService struct {
 	dbRepository       users.DBUserRepositoryInterface
 	inMemoryRepository users.InMemoryUserRepositoryInterface
 	app                *config.App
 }
 
+// Create saves a new User entity.
 func (s *UserService) Create(ctx context.Context, ip string) (model.User, error) {
 	var responseUser model.User
 	var err error
@@ -64,6 +71,7 @@ func (s *UserService) Create(ctx context.Context, ip string) (model.User, error)
 	return responseUser, nil
 }
 
+// Login registers and provides user's auth token.
 func (s *UserService) Login(userID int, cfg *config.Config) (string, error) {
 
 	token, err := s.BuildJWTString(userID, cfg)
@@ -75,6 +83,7 @@ func (s *UserService) Login(userID int, cfg *config.Config) (string, error) {
 	return token, nil
 }
 
+// GetByIP returns a User entity by its IP.
 func (s *UserService) GetByIP(ctx context.Context, ip string) (int, error) {
 	var userID int
 	var err error
@@ -92,11 +101,13 @@ func (s *UserService) GetByIP(ctx context.Context, ip string) (int, error) {
 	return userID, nil
 }
 
+// Claims provides claims for user jwt token.
 type Claims struct {
 	jwt.RegisteredClaims
 	UserID int
 }
 
+// BuildJWTString generates and returns user's jwt token by Claims.
 func (s *UserService) BuildJWTString(userID int, cfg *config.Config) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, Claims{
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -111,6 +122,7 @@ func (s *UserService) BuildJWTString(userID int, cfg *config.Config) (string, er
 	return tokenString, nil
 }
 
+// GetUserID decodes and returns user ID from a jwt token.
 func GetUserID(tokenString string, cfg *config.Config) int {
 	claims := &Claims{}
 	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
@@ -129,6 +141,7 @@ func GetUserID(tokenString string, cfg *config.Config) int {
 	return claims.UserID
 }
 
+// NewUserService initializes a new NewUserService.
 func NewUserService(dbRepository users.DBUserRepositoryInterface, inMemoryRepository users.InMemoryUserRepositoryInterface, app *config.App) *UserService {
 	return &UserService{
 		dbRepository:       dbRepository,

@@ -11,16 +11,21 @@ import (
 	"github.com/artni96/url-shortener/internal/model"
 )
 
+// DBUserRepositoryInterface encapsulates the logic to handle User entities via database management system (Postgres).
 type DBUserRepositoryInterface interface {
+	// Create saves a User entity.
 	Create(ctx context.Context, ip string) (model.User, error)
+	// GetByIP returns a User entity by its ID.
 	GetByIP(ctx context.Context, ip string) (int, error)
 }
 
+// DBUserRepository implements an object-mediator with a database.
 type DBUserRepository struct {
 	db     *sqlx.DB
 	logger *zap.Logger
 }
 
+// Create saves a new User entity in the database by user's IP.
 func (repo *DBUserRepository) Create(ctx context.Context, ip string) (model.User, error) {
 	var userID int
 
@@ -38,6 +43,7 @@ func (repo *DBUserRepository) Create(ctx context.Context, ip string) (model.User
 	return entity, nil
 }
 
+// GetByIP returns a User data from the database by its ID.
 func (repo *DBUserRepository) GetByIP(ctx context.Context, ip string) (int, error) {
 	var userID int
 
@@ -49,6 +55,7 @@ func (repo *DBUserRepository) GetByIP(ctx context.Context, ip string) (int, erro
 	return userID, nil
 }
 
+// NewUserDBRepository initializes a new DBUserRepository.
 func NewUserDBRepository(app *config.App) (*DBUserRepository, error) {
 	return &DBUserRepository{
 		db:     app.DB,

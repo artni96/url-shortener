@@ -1,5 +1,6 @@
 package model
 
+// AuditEntity represents an Audit entity.
 type AuditEntity struct {
 	Ts     int64  `json:"ts"`
 	Action string `json:"action"`

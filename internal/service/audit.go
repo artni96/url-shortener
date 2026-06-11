@@ -13,24 +13,29 @@ import (
 	urlrepo "github.com/artni96/url-shortener/internal/repository/urls"
 )
 
+// Semaphore is an implementation of Semaphore pattern via a semeCh channel.
 type Semaphore struct {
 	semaCh chan struct{}
 }
 
+// NewSemaphore initializes a new Semaphore.
 func NewSemaphore(limit int) *Semaphore {
 	return &Semaphore{
 		semaCh: make(chan struct{}, limit),
 	}
 }
 
+// Acquire fills up semaCh with an object.
 func (s *Semaphore) Acquire() {
 	s.semaCh <- struct{}{}
 }
 
+// Release read an object from semaCh.
 func (s *Semaphore) Release() {
 	<-s.semaCh
 }
 
+// RunAudit sends Audit entities according to the cfg.
 func RunAudit(app *config.App) {
 	var wg sync.WaitGroup
 

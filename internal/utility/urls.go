@@ -6,6 +6,7 @@ import (
 	"fmt"
 )
 
+// GenerateShortURL generates a string of random bytes.
 func GenerateShortURL(length int) (string, error) {
 	bytes := make([]byte, length)
 	_, err := rand.Read(bytes)
@@ -16,6 +17,7 @@ func GenerateShortURL(length int) (string, error) {
 	return resp, err
 }
 
+// BulkGenerateShortURL generates several strings of random bytes.
 func BulkGenerateShortURL(amount int, length int) ([]string, error) {
 	result := make([]string, 0, amount)
 	for range amount {
