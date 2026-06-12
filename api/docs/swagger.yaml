@@ -221,4 +221,19 @@ paths:
       summary: Provides the list of user's URLs
       tags:
       - urls
+  /ping:
+    get:
+      consumes:
+      - application/json
+      description: Checks DB connection
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+        "500":
+          description: Internal Server Error
+      summary: Checks DB connection
+      tags:
+      - health check
 swagger: "2.0"

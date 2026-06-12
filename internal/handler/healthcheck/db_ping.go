@@ -32,12 +32,12 @@ func NewHealthCheckHandler(ctx *context.Context, app *config.App) *Handler {
 // PingHandler godoc
 // @Summary Checks DB connection
 // @Description Checks DB connection
-// @Tags healthcheck
+// @Tags health check
 // @Accept json
 // @Produce json
 // @Success 200
 // @Failure 500
-// @Router /{id} [get]
+// @Router /ping [get]
 func (h *Handler) PingHandler(w http.ResponseWriter, r *http.Request) {
 	if err := h.db.PingContext(*h.ctx); err != nil {
 		h.log.Info("unable to ping database", zap.Error(err))
