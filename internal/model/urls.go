@@ -1,5 +1,8 @@
 package model
 
+type URLCreateRequestWithoutUser struct {
+	OriginalURL string `json:"url"`
+}
 type URLCreateRequest struct {
 	OriginalURL string `json:"url"`
 	CreatedBy   int    `json:"created_by"`
@@ -32,6 +35,11 @@ type URLEntity struct {
 type URLListEntity struct {
 	OriginalURL string `json:"original_url" db:"original_url"`
 	ShortURL    string `json:"short_url" db:"short_url"`
+}
+
+type URLBulkCreateRequestWithoutUser struct {
+	CorrelationID string `json:"correlation_id"`
+	OriginalURL   string `json:"original_url"`
 }
 
 type URLBulkCreateRequest struct {

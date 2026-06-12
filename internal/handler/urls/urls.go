@@ -50,6 +50,18 @@ func NewURLHandler(ctx *context.Context, app *config.App, urlService service.URL
 	}
 }
 
+// ShortenURLHandler godoc
+// @Summary Short URL creation
+// @Description Creates short URL for an original URL
+// @Tags urls
+// @Accept json
+// @Produce json
+// @Param request body model.URLCreateRequestWithoutUser true "creates short URL for an original one"
+// @Success 201
+// @Failure 400
+// @Failure 409 "original URL already exists"
+// @Failure 500
+// @Router /api/shorten [post]
 func (h *URLHandler) ShortenURLHandler(w http.ResponseWriter, r *http.Request) {
 	userID, err := getOrCreateUserID(h, w, r)
 	if err != nil {
@@ -123,6 +135,18 @@ func (h *URLHandler) ShortenURLHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(resp)
 }
 
+// BulkCreateURLHandler godoc
+// @Summary Multiple short URLs creation
+// @Description Creates multiple short URL by a request
+// @Tags urls
+// @Accept json
+// @Produce json
+// @Param request body []model.URLBulkCreateRequestWithoutUser true "creates short URL for an original one"
+// @Success 201
+// @Failure 400
+// @Failure 409 "some original ULRs already exist"
+// @Failure 500
+// @Router /api/shorten/batch [post]
 func (h *URLHandler) BulkCreateURLHandler(w http.ResponseWriter, r *http.Request) {
 	userID, err := getOrCreateUserID(h, w, r)
 	if err != nil {
@@ -177,6 +201,18 @@ func (h *URLHandler) BulkCreateURLHandler(w http.ResponseWriter, r *http.Request
 	w.Write(resp)
 }
 
+// CreateURLHandler godoc
+// @Summary Short URL creation
+// @Description Creates short URL for an original URL
+// @Tags urls
+// @Accept json
+// @Produce json
+// @Param request body string true "creates short URL for an original one"
+// @Success 201
+// @Failure 400
+// @Failure 409 "original URL already exists"
+// @Failure 500
+// @Router / [post]
 func (h *URLHandler) CreateURLHandler(w http.ResponseWriter, r *http.Request) {
 	originalURL, err := io.ReadAll(r.Body)
 	defer r.Body.Close()
@@ -246,6 +282,17 @@ func (h *URLHandler) CreateURLHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(shortURL))
 }
 
+// GetURLHandler godoc
+// @Summary Provides an original URL by a short one
+// @Description Provides an original URL by a short one
+// @Tags urls
+// @Accept json
+// @Produce json
+// @Param id path string true "Short URL"
+// @Success 307
+// @Failure 400
+// @Failure 410
+// @Router /{id} [get]
 func (h *URLHandler) GetURLHandler(w http.ResponseWriter, r *http.Request) {
 	entity, err := h.urlService.GetByShortURL(*h.ctx, strings.TrimPrefix(r.URL.Path, "/"))
 	if err != nil {
@@ -272,6 +319,15 @@ func (h *URLHandler) GetURLHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusTemporaryRedirect)
 }
 
+// GetListHandler godoc
+// @Summary Provides the list of all URLs
+// @Description Provides the list of all URLs
+// @Tags urls
+// @Accept json
+// @Produce json
+// @Success 200
+// @Failure 400
+// @Router / [get]
 func (h *URLHandler) GetListHandler(w http.ResponseWriter, r *http.Request) {
 	urlList, err := h.urlService.GetList(*h.ctx, h.responseDomain)
 	w.Header().Set("Content-Type", "application/json")
@@ -289,6 +345,17 @@ func (h *URLHandler) GetListHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(resp)
 }
 
+// GetUserListHandler godoc
+// @Summary Provides the list of user's URLs
+// @Description Provides the list of authorized user's URLs
+// @Tags urls
+// @Accept json
+// @Produce json
+// @Success 200
+// @Success 204
+// @Failure 400
+// @Failure 401
+// @Router /api/user/urls  [get]
 func (h *URLHandler) GetUserListHandler(w http.ResponseWriter, r *http.Request) {
 	userID, err := getOrCreateUserID(h, w, r)
 	w.Header().Set("Content-Type", "application/json")
@@ -323,6 +390,18 @@ func (h *URLHandler) GetUserListHandler(w http.ResponseWriter, r *http.Request) 
 
 }
 
+// UpdateURLHandler godoc
+// @Summary Updates an original URL by its short URL only by an author
+// @Description Updates an original URL by its short URL only by an author
+// @Tags urls
+// @Accept json
+// @Produce json
+// @Param request body model.URLCreateRequestWithoutUser true "update short URL for an original one"
+// @Success 200
+// @Failure 400
+// @Failure 409
+// @Failure 500
+// @Router /{id} [patch]
 func (h *URLHandler) UpdateURLHandler(w http.ResponseWriter, r *http.Request) {
 	shortURL := strings.TrimPrefix(r.URL.Path, "/")
 
@@ -375,6 +454,16 @@ func (h *URLHandler) UpdateURLHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(resp)
 }
 
+// DeleteURLHandler godoc
+// @Summary Removes an original URL by a short one
+// @Description Removes an original URL by a short one
+// @Tags urls
+// @Accept json
+// @Produce json
+// @Param id path string true "Short URL"
+// @Success 204
+// @Failure 400
+// @Router /{id} [delete]
 func (h *URLHandler) DeleteURLHandler(w http.ResponseWriter, r *http.Request) {
 	shortURL := strings.TrimPrefix(r.URL.Path, "/")
 	err := h.urlService.Delete(*h.ctx, shortURL)
@@ -392,6 +481,15 @@ func (h *URLHandler) DeleteURLHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// BulkDeleteURLHandler godoc
+// @Summary Removes a list of original URLs by short URLs
+// @Description You need to provide a list of short URLs to remove them
+// @Tags urls
+// @Accept json
+// @Produce json
+// @Param request body []string true "list of short URLs"
+// @Success 202
+// @Router /api/user/urls [delete]
 func (h *URLHandler) BulkDeleteURLHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)

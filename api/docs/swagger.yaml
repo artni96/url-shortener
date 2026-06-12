@@ -1,0 +1,224 @@
+definitions:
+  model.URLBulkCreateRequestWithoutUser:
+    properties:
+      correlation_id:
+        type: string
+      original_url:
+        type: string
+    type: object
+  model.URLCreateRequestWithoutUser:
+    properties:
+      url:
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: URL-shortener is a tool to shorten a long link and create a short URL
+    easy to share on sites, chat and emails.
+  title: URL-shortener
+  version: "1.0"
+paths:
+  /:
+    get:
+      consumes:
+      - application/json
+      description: Provides the list of all URLs
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: Bad Request
+      summary: Provides the list of all URLs
+      tags:
+      - urls
+    post:
+      consumes:
+      - application/json
+      description: Creates short URL for an original URL
+      parameters:
+      - description: creates short URL for an original one
+        in: body
+        name: request
+        required: true
+        schema:
+          type: string
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+        "400":
+          description: Bad Request
+        "409":
+          description: original URL already exists
+        "500":
+          description: Internal Server Error
+      summary: Short URL creation
+      tags:
+      - urls
+  /{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Removes an original URL by a short one
+      parameters:
+      - description: Short URL
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+      summary: Removes an original URL by a short one
+      tags:
+      - urls
+    get:
+      consumes:
+      - application/json
+      description: Provides an original URL by a short one
+      parameters:
+      - description: Short URL
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "307":
+          description: Temporary Redirect
+        "400":
+          description: Bad Request
+        "410":
+          description: Gone
+      summary: Provides an original URL by a short one
+      tags:
+      - urls
+    patch:
+      consumes:
+      - application/json
+      description: Updates an original URL by its short URL only by an author
+      parameters:
+      - description: update short URL for an original one
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/model.URLCreateRequestWithoutUser'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: Bad Request
+        "409":
+          description: Conflict
+        "500":
+          description: Internal Server Error
+      summary: Updates an original URL by its short URL only by an author
+      tags:
+      - urls
+  /api/shorten:
+    post:
+      consumes:
+      - application/json
+      description: Creates short URL for an original URL
+      parameters:
+      - description: creates short URL for an original one
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/model.URLCreateRequestWithoutUser'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+        "400":
+          description: Bad Request
+        "409":
+          description: original URL already exists
+        "500":
+          description: Internal Server Error
+      summary: Short URL creation
+      tags:
+      - urls
+  /api/shorten/batch:
+    post:
+      consumes:
+      - application/json
+      description: Creates multiple short URL by a request
+      parameters:
+      - description: creates short URL for an original one
+        in: body
+        name: request
+        required: true
+        schema:
+          items:
+            $ref: '#/definitions/model.URLBulkCreateRequestWithoutUser'
+          type: array
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+        "400":
+          description: Bad Request
+        "409":
+          description: some original ULRs already exist
+        "500":
+          description: Internal Server Error
+      summary: Multiple short URLs creation
+      tags:
+      - urls
+  /api/user/urls:
+    delete:
+      consumes:
+      - application/json
+      description: You need to provide a list of short URLs to remove them
+      parameters:
+      - description: list of short URLs
+        in: body
+        name: request
+        required: true
+        schema:
+          items:
+            type: string
+          type: array
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+      summary: Removes a list of original URLs by short URLs
+      tags:
+      - urls
+    get:
+      consumes:
+      - application/json
+      description: Provides the list of authorized user's URLs
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+        "401":
+          description: Unauthorized
+      summary: Provides the list of user's URLs
+      tags:
+      - urls
+swagger: "2.0"

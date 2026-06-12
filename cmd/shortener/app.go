@@ -9,8 +9,10 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	httpSwagger "github.com/swaggo/http-swagger"
 	"go.uber.org/zap"
 
+	_ "github.com/artni96/url-shortener/api/docs"
 	"github.com/artni96/url-shortener/internal/config"
 	"github.com/artni96/url-shortener/internal/config/db"
 	"github.com/artni96/url-shortener/internal/handler/healthcheck"
@@ -77,6 +79,9 @@ func run(cfg *config.Config) error {
 	}
 
 	mainRouter := chi.NewRouter()
+
+	mainRouter.Get("/swagger/*", httpSwagger.WrapHandler)
+
 	urlRouter := urls.URLRouter(&ctx, app, urlService, userService, cfg)
 	healthRouter := healthcheck.HealthCheckRouter(&ctx, app)
 	mainRouter.Mount("/", urlRouter)
