@@ -93,17 +93,14 @@ func RunAudit(app *config.App) {
 			app.Logger.Error("failed to initialize file writer", zap.Error(err))
 		}
 		fileSink = NewFileSink(app, fileWriter)
+		defer fileSink.Close()
 		sinks = append(sinks, fileSink)
-		defer func() {
-			if fileWriter != nil {
-				fileWriter.Close()
-			}
-		}()
 	}
 
 	var httpSink *HTTPSink
 	if app.Cfg.AuditURL != "" {
 		httpSink = NewHTTPSink(app)
+		defer httpSink.Close()
 		sinks = append(sinks, httpSink)
 	}
 
@@ -111,16 +108,17 @@ func RunAudit(app *config.App) {
 		wg.Add(1)
 		semaphore.Acquire()
 
-		for _, sink := range sinks {
-			if err := sink.Sink(obj); err != nil {
-				app.Logger.Error("failed to write to run audit entity", zap.Error(err))
-			}
-		}
+		go func(obj model.AuditEntity) {
 
-		go func() {
 			defer wg.Done()
 			defer semaphore.Release()
-		}()
+
+			for _, sink := range sinks {
+				if err := sink.Sink(obj); err != nil {
+					app.Logger.Error("failed to run audit entity", zap.Error(err))
+				}
+			}
+		}(obj)
 	}
 	wg.Wait()
 }

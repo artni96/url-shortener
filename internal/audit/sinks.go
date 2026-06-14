@@ -14,6 +14,7 @@ import (
 
 type AuditSink interface {
 	Sink(obj model.AuditEntity) error
+	Close()
 }
 
 type HTTPSink struct {
@@ -48,6 +49,10 @@ func (s *HTTPSink) Sink(obj model.AuditEntity) error {
 	return nil
 }
 
+func (s *HTTPSink) Close() {
+	s.client.CloseIdleConnections()
+}
+
 type FileSink struct {
 	app        *config.App
 	fileWriter *AuditWriter
@@ -70,4 +75,8 @@ func (s *FileSink) Sink(obj model.AuditEntity) error {
 		return err
 	}
 	return nil
+}
+
+func (s *FileSink) Close() {
+	s.fileWriter.Close()
 }
