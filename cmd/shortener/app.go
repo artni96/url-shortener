@@ -101,10 +101,6 @@ func run(cfg *config.Config) error {
 		Handler: mainRouter,
 	}
 
-	gsPeriod := time.Second * 5
-	gsCtx, gsCancel := context.WithTimeout(ctx, gsPeriod)
-	defer gsCancel()
-
 	go audit.RunAudit(app)
 
 	go func() {
@@ -117,7 +113,13 @@ func run(cfg *config.Config) error {
 	shutdownChan := make(chan os.Signal, 1)
 	signal.Notify(shutdownChan, os.Interrupt)
 	<-shutdownChan
+
+	gsPeriod := time.Second * 5
+	gsCtx, gsCancel := context.WithTimeout(ctx, gsPeriod)
+	defer gsCancel()
+
 	close(shutdownChan)
+	close(auditChan)
 
 	app.Logger.Info("shutting app down", zap.Time("time", time.Now()))
 	go func() {
@@ -131,7 +133,7 @@ func run(cfg *config.Config) error {
 	case <-gsCtx.Done():
 		if err = app.DB.Close(); err != nil {
 			app.Logger.Info("failed to close database", zap.Error(err))
-		} else {
+		} else if app.DB == nil {
 			app.Logger.Info("database connection closed gracefully ")
 		}
 	}

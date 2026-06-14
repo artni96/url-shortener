@@ -117,22 +117,10 @@ func RunAudit(app *config.App) {
 			}
 		}
 
-		//go func(obj model.AuditEntity) {
-		//	err := fileSink.Sink(obj)
-		//	if err != nil {
-		//		app.Logger.Error("failed to write audit entity", zap.Error(err))
-		//	}
-		//
-		//	err = httpSink.Sink(obj)
-		//
-		//	if err != nil {
-		//		app.Logger.Error("failed to send audit entity", zap.Error(err))
-		//	}
-
-		defer wg.Done()
-		defer semaphore.Release()
-		//}(obj)
-
+		go func() {
+			defer wg.Done()
+			defer semaphore.Release()
+		}()
 	}
 	wg.Wait()
 }

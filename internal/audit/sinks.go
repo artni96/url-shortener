@@ -55,7 +55,6 @@ type FileSink struct {
 }
 
 func NewFileSink(app *config.App, fileWriter *AuditWriter) *FileSink {
-
 	return &FileSink{
 		app:        app,
 		fileWriter: fileWriter,
