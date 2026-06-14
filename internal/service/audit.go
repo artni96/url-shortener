@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/artni96/url-shortener/internal/model"
 	"go.uber.org/zap"
 
 	"github.com/artni96/url-shortener/internal/config"
@@ -38,50 +39,63 @@ func (s *Semaphore) Release() {
 // RunAudit sends Audit entities according to the cfg.
 func RunAudit(app *config.App) {
 	var wg sync.WaitGroup
-
 	semaphore := NewSemaphore(10)
+
+	var fileWriter *urlrepo.AuditWriter
+	if app.Cfg.AuditFile != "" {
+		var err error
+		fileWriter, err = urlrepo.NewAuditWriter(app.Cfg.AuditFile)
+		if err != nil {
+			app.Logger.Error("failed to initialize file writer", zap.Error(err))
+		}
+		defer func() {
+			if fileWriter != nil {
+				fileWriter.Close()
+			}
+		}()
+	}
+
+	var client *http.Client
+	if app.Cfg.AuditURL != "" {
+		client = &http.Client{
+			Timeout: 10 * time.Second,
+		}
+	}
+
 	for obj := range app.AuditChan {
 		wg.Add(1)
 		semaphore.Acquire()
-		go func() {
-			auditFile := app.Cfg.AuditFile
-			if auditFile != "" {
-				go func() {
-					fileWriter, err := urlrepo.NewAuditWriter(auditFile)
-					if err != nil {
-						app.Logger.Error("failed to initialize file writer", zap.Error(err))
-					}
-					err = fileWriter.WriteAuditEntity(obj)
-					if err != nil {
-						app.Logger.Error("failed to write audit entity", zap.Error(err))
-					}
-					defer fileWriter.Close()
-				}()
-			}
-			auditURL := app.Cfg.AuditURL
-			if auditURL != "" {
-				go func() {
-					client := &http.Client{
-						Timeout: 10 * time.Second,
-					}
-					byteBody, err := json.Marshal(obj)
-					if err != nil {
-						app.Logger.Error("failed to marshal audit entity", zap.Error(err))
-					}
-					stringBody := strings.NewReader(string(byteBody))
-					req, err := http.NewRequest("POST", auditURL, stringBody)
-					req.Header.Set("Content-Type", "application/json")
 
-					resp, err := client.Do(req)
-					if err != nil {
-						app.Logger.Error("failed to send audit entity", zap.Error(err))
-					}
-					defer resp.Body.Close()
-				}()
+		go func(obj model.AuditEntity) {
+
+			if app.Cfg.AuditFile != "" {
+				err := fileWriter.WriteAuditEntity(obj)
+				if err != nil {
+					app.Logger.Error("failed to write audit entity", zap.Error(err))
+				}
 			}
+
+			if app.Cfg.AuditURL != "" && client != nil {
+				byteBody, err := json.Marshal(obj)
+				if err != nil {
+					app.Logger.Error("failed to marshal audit entity", zap.Error(err))
+				}
+				stringBody := strings.NewReader(string(byteBody))
+				req, err := http.NewRequest("POST", app.Cfg.AuditURL, stringBody)
+				req.Header.Set("Content-Type", "application/json")
+
+				resp, err := client.Do(req)
+				if err != nil {
+					app.Logger.Error("failed to send audit entity", zap.Error(err))
+				}
+				defer resp.Body.Close()
+
+			}
+
 			defer wg.Done()
 			defer semaphore.Release()
-		}()
-		wg.Wait()
+		}(obj)
+
 	}
+	wg.Wait()
 }
