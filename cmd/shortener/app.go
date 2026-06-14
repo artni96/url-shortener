@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"time"
 
+	"github.com/artni96/url-shortener/internal/audit"
 	"github.com/go-chi/chi/v5"
 	httpSwagger "github.com/swaggo/http-swagger"
 	"go.uber.org/zap"
@@ -104,7 +105,7 @@ func run(cfg *config.Config) error {
 	gsCtx, gsCancel := context.WithTimeout(ctx, gsPeriod)
 	defer gsCancel()
 
-	go service.RunAudit(app)
+	go audit.RunAudit(app)
 
 	go func() {
 		err = newServer.ListenAndServe()

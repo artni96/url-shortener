@@ -2,7 +2,6 @@ package urls
 
 import (
 	"errors"
-	"fmt"
 )
 
 var (
@@ -11,6 +10,6 @@ var (
 	ErrURLNotFound              = errors.New("url not found")
 	ErrURLNotCreated            = errors.New("could not create url")
 	ErrURLListIsNotUnique       = errors.New("url list is not unique")
-	ErrDuplicatedURL            = errors.New(fmt.Sprintf("duplicated url"))
+	ErrDuplicatedURL            = errors.New("duplicated url")
 	ErrUserIsNotAuthor          = errors.New("user is not url author")
 )
