@@ -109,7 +109,6 @@ func RunAudit(app *config.App) {
 		semaphore.Acquire()
 
 		go func(obj model.AuditEntity) {
-
 			defer wg.Done()
 			defer semaphore.Release()
 
