@@ -9,6 +9,8 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/joho/godotenv"
 	"go.uber.org/zap"
+
+	"github.com/artni96/url-shortener/internal/model"
 )
 
 type Config struct {
@@ -19,6 +21,8 @@ type Config struct {
 	DatabaseDsn     string        `env:"DATABASE_DSN"`
 	SecretKey       string        `env:"SECRET_KEY"`
 	TokenExp        time.Duration `env:"TOKEN_EXPIRATION"`
+	AuditFile       string        `env:"AUDIT_FILE"`
+	AuditURL        string        `env:"AUDIT_URL"`
 }
 
 func ParseFlags() (*Config, error) {
@@ -30,6 +34,8 @@ func ParseFlags() (*Config, error) {
 	fs.StringVar(&conf.FileStoragePath, "f", "", "file storage path")
 	fs.StringVar(&conf.DebugLevel, "debug", "Info", "debug level")
 	fs.StringVar(&conf.DatabaseDsn, "d", "", "database dsn")
+	fs.StringVar(&conf.AuditFile, "audit-file", "", "audit file path")
+	fs.StringVar(&conf.AuditURL, "audit-url", "", "audit url")
 
 	err := fs.Parse(os.Args[1:])
 	if err != nil {
@@ -55,10 +61,22 @@ func ParseFlags() (*Config, error) {
 	if ok {
 		conf.FileStoragePath = envFileStorePath
 	}
+
 	envDatabaseDsn, ok := os.LookupEnv("DATABASE_DSN")
 	if ok {
 		conf.DatabaseDsn = envDatabaseDsn
 	}
+
+	envAuditFile, ok := os.LookupEnv("AUDIT_FILE")
+	if ok {
+		conf.AuditFile = envAuditFile
+	}
+
+	envAuditURL, ok := os.LookupEnv("AUDIT_URL")
+	if ok {
+		conf.AuditURL = envAuditURL
+	}
+
 	err = godotenv.Load(".env")
 	if err != nil {
 		return &conf, errors.New("error loading .env file. Keep working with default values")
@@ -79,7 +97,8 @@ func ParseFlags() (*Config, error) {
 }
 
 type App struct {
-	DB     *sqlx.DB
-	Cfg    *Config
-	Logger *zap.Logger
+	DB        *sqlx.DB
+	Cfg       *Config
+	Logger    *zap.Logger
+	AuditChan chan model.AuditEntity
 }

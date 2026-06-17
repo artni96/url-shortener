@@ -8,11 +8,13 @@ import (
 	"os"
 	"sync"
 
+	"go.uber.org/zap"
+
 	"github.com/artni96/url-shortener/internal/config"
 	"github.com/artni96/url-shortener/internal/model"
-	"go.uber.org/zap"
 )
 
+// InMemoryUserRepositoryInterface encapsulates the logic to handle User entities via in-memory storage.
 type InMemoryUserRepositoryInterface interface {
 	Create(ip string) (model.User, error)
 	GetByIP(ip string) (int, error)
@@ -20,12 +22,14 @@ type InMemoryUserRepositoryInterface interface {
 	uploadInMemoryStorage(filepath string) error
 }
 
+// InMemoryUserRepository implements an object-medicator with the in-memory storage.
 type InMemoryUserRepository struct {
 	mu     sync.RWMutex
 	users  map[int]string
 	logger *zap.Logger
 }
 
+// Create saves a new User entity in the in-memory storage by user's IP.
 func (repo *InMemoryUserRepository) Create(ip string) (model.User, error) {
 	repo.mu.Lock()
 	defer repo.mu.Unlock()
@@ -41,6 +45,7 @@ func (repo *InMemoryUserRepository) Create(ip string) (model.User, error) {
 	return model.User{ID: userID, IP: ip}, nil
 }
 
+// GetByIP returns a User data from the in-memory storage by its ID.
 func (repo *InMemoryUserRepository) GetByIP(ip string) (int, error) {
 	repo.mu.RLock()
 	defer repo.mu.RUnlock()
@@ -56,6 +61,7 @@ func (repo *InMemoryUserRepository) GetByIP(ip string) (int, error) {
 	return -1, fmt.Errorf("user not found for ip %s", ip)
 }
 
+// NewInMemoryUserRepository implements a new InMemoryUserRepository.
 func NewInMemoryUserRepository(app *config.App) (*InMemoryUserRepository, error) {
 	repo := InMemoryUserRepository{
 		users:  make(map[int]string),
@@ -73,11 +79,13 @@ func NewInMemoryUserRepository(app *config.App) (*InMemoryUserRepository, error)
 	return &repo, nil
 }
 
+// Writer is a custom writer to write new User data into the file.
 type Writer struct {
 	file   *os.File
 	writer *bufio.Writer
 }
 
+// NewWriter initializes a new Writer.
 func NewWriter(filename string) (*Writer, error) {
 	file, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
@@ -86,6 +94,7 @@ func NewWriter(filename string) (*Writer, error) {
 	return &Writer{file: file, writer: bufio.NewWriter(file)}, nil
 }
 
+// WriteEntity saves a new User entity into the file.
 func (w *Writer) WriteEntity(user model.User) error {
 	data, err := json.Marshal(&user)
 	if err != nil {
@@ -102,6 +111,8 @@ func (w *Writer) WriteEntity(user model.User) error {
 	defer w.Close()
 	return w.writer.Flush()
 }
+
+// BulkWriteEntities saves several new User entities into the file.
 func (w *Writer) BulkWriteEntities(entities []model.User, toTruncate bool) error {
 	if toTruncate {
 		err := os.Truncate(w.file.Name(), 0)
@@ -133,15 +144,18 @@ func (w *Writer) BulkWriteEntities(entities []model.User, toTruncate bool) error
 	return w.writer.Flush()
 }
 
+// Close gently finishes Writer interaction with the file.
 func (w *Writer) Close() error {
 	return w.file.Close()
 }
 
+// FileScanner is a custom reader to get User data from the file.
 type FileScanner struct {
 	file    *os.File
 	scanner *bufio.Scanner
 }
 
+// NewFileScanner initializes a new FileScanner.
 func NewFileScanner(filename string) (*FileScanner, error) {
 	file, err := os.OpenFile(filename, os.O_RDONLY|os.O_CREATE, 0644)
 	if err != nil {
@@ -150,10 +164,12 @@ func NewFileScanner(filename string) (*FileScanner, error) {
 	return &FileScanner{file: file, scanner: bufio.NewScanner(file)}, nil
 }
 
+// Close gently finishes FileScanner interaction with the file.
 func (s *FileScanner) Close() error {
 	return s.file.Close()
 }
 
+// CollectData extracts User entities from the file.
 func (s *FileScanner) CollectData() ([]model.User, error) {
 	var result []model.User
 	for s.scanner.Scan() {
@@ -171,6 +187,7 @@ func (s *FileScanner) CollectData() ([]model.User, error) {
 	return result, nil
 }
 
+// UploadInMemoryStorage saves a new User entity from the file in the in-memory storage.
 func (repo *InMemoryUserRepository) UploadInMemoryStorage(user model.User) error {
 	repo.mu.Lock()
 	defer repo.mu.Unlock()
@@ -179,6 +196,7 @@ func (repo *InMemoryUserRepository) UploadInMemoryStorage(user model.User) error
 	return nil
 }
 
+// uploadInMemoryStorage updates the in-memory storage with data from the file.
 func (repo *InMemoryUserRepository) uploadInMemoryStorage(filepath string) error {
 	fileReader, err := NewFileScanner(filepath)
 	if fileReader == nil {

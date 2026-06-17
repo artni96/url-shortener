@@ -5,34 +5,46 @@ import (
 	"errors"
 	"fmt"
 
+	"go.uber.org/zap"
+
 	"github.com/artni96/url-shortener/internal/config"
 	"github.com/artni96/url-shortener/internal/model"
 	urlrepo "github.com/artni96/url-shortener/internal/repository/urls"
 	usersrepo "github.com/artni96/url-shortener/internal/repository/users"
 	"github.com/artni96/url-shortener/internal/utility"
-	"go.uber.org/zap"
 )
 
 var ErrFailedToCreated = errors.New("could not create ShortURL")
 
+// URLServiceInterface encapsulates usecase logic for URL entities.
 type URLServiceInterface interface {
+	// GetList returns the list of all URL entities.
 	GetList(ctx context.Context, responseDomain string) ([]model.URLListEntity, error)
+	// GetUserList returns the list of user's URL entities.
 	GetUserList(ctx context.Context, responseDomain string, createdBy int) ([]model.URLListEntity, error)
+	// GetByShortURL returns a URL entity with original URL value by its short URL.
 	GetByShortURL(ctx context.Context, urlID string) (model.GetByShortURLResponse, error)
+	// Create saves a new URL entity.
 	Create(ctx context.Context, entity model.URLCreateRequest, responseDomain string) (string, error)
+	// BulkCreate saves multiple URL entities by one commit.
 	BulkCreate(ctx context.Context, urls []model.URLBulkCreateRequest, responseDomain string) ([]model.URLBulkCreateResponse, error)
+	// Update saves the changes of a URL entity.
 	Update(ctx context.Context, entity model.URLEntity) (string, error)
+	// Delete removes a URL entity by its short URL value.
 	Delete(ctx context.Context, urlID string) error
+	// BulkDelete removes several URL entities by one commit.
 	BulkDelete(ctx context.Context, urls []model.URLDelete) error
 }
+
+// URLService implements the interaction with URL data through DB or/else a file.
 type URLService struct {
 	dbRepository       urlrepo.DBURLRepositoryInterface
 	inMemoryRepository urlrepo.InMemoryURLRepositoryInterface
 	app                *config.App
 }
 
+// GetList returns the list of all URL entities.
 func (s *URLService) GetList(ctx context.Context, responseDomain string) ([]model.URLListEntity, error) {
-
 	var entities []model.URLEntity
 	var err error
 
@@ -52,12 +64,11 @@ func (s *URLService) GetList(ctx context.Context, responseDomain string) ([]mode
 		})
 
 	}
-
 	return response, nil
 }
 
+// GetUserList returns the list of user's URL entities.
 func (s *URLService) GetUserList(ctx context.Context, responseDomain string, createdBy int) ([]model.URLListEntity, error) {
-
 	var entities []model.URLEntity
 	var err error
 
@@ -77,10 +88,10 @@ func (s *URLService) GetUserList(ctx context.Context, responseDomain string, cre
 		})
 
 	}
-
 	return response, nil
 }
 
+// GetByShortURL returns a URL entity with original URL value by its short URL.
 func (s *URLService) GetByShortURL(ctx context.Context, shortURL string) (model.GetByShortURLResponse, error) {
 	var entity model.GetByShortURLResponse
 	var err error
@@ -98,8 +109,8 @@ func (s *URLService) GetByShortURL(ctx context.Context, shortURL string) (model.
 	return entity, nil
 }
 
+// Create saves a new URL entity.
 func (s *URLService) Create(ctx context.Context, requestEntity model.URLCreateRequest, responseDomain string) (string, error) {
-
 	for i := range 5 {
 		var responseEntity model.URLEntity
 		var err error
@@ -169,6 +180,7 @@ func (s *URLService) Create(ctx context.Context, requestEntity model.URLCreateRe
 	return "", fmt.Errorf("%w %s", ErrFailedToCreated, requestEntity.OriginalURL)
 }
 
+// BulkCreate saves multiple URL entities by one commit.
 func (s *URLService) BulkCreate(ctx context.Context, urls []model.URLBulkCreateRequest, responseDomain string) ([]model.URLBulkCreateResponse, error) {
 	isURLListUnique := false
 	var urlList []string
@@ -249,6 +261,7 @@ func (s *URLService) BulkCreate(ctx context.Context, urls []model.URLBulkCreateR
 	return response, nil
 }
 
+// Update saves the changes of a URL entity.
 func (s *URLService) Update(ctx context.Context, entity model.URLEntity) (string, error) {
 	var updatedEntity model.URLEntity
 	var err error
@@ -268,6 +281,7 @@ func (s *URLService) Update(ctx context.Context, entity model.URLEntity) (string
 	return updatedEntity.OriginalURL, nil
 }
 
+// Delete removes a URL entity by its short URL value.
 func (s *URLService) Delete(ctx context.Context, shortURL string) error {
 	var err error
 	if s.dbRepository != nil {
@@ -288,6 +302,7 @@ func (s *URLService) Delete(ctx context.Context, shortURL string) error {
 	return nil
 }
 
+// BulkDelete removes several URL entities by one commit.
 func (s *URLService) BulkDelete(ctx context.Context, urls []model.URLDelete) error {
 	set := make(map[string]struct{})
 	var uniqueURLs []model.URLDelete
@@ -324,6 +339,7 @@ func (s *URLService) BulkDelete(ctx context.Context, urls []model.URLDelete) err
 	return nil
 }
 
+// BulkFileUpdate updates the file with new data (users and urls).
 func BulkFileUpdate(s *URLService) error {
 	filepath := s.app.Cfg.FileStoragePath
 
@@ -389,6 +405,7 @@ func BulkFileUpdate(s *URLService) error {
 	return nil
 }
 
+// NewURLService initializes a new URLService.
 func NewURLService(
 	dbRepository urlrepo.DBURLRepositoryInterface,
 	inMemoryRepository urlrepo.InMemoryURLRepositoryInterface,

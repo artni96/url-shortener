@@ -13,6 +13,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"go.uber.org/zap"
+
 	"github.com/artni96/url-shortener/internal/config"
 	"github.com/artni96/url-shortener/internal/config/db"
 	"github.com/artni96/url-shortener/internal/model"
@@ -20,11 +23,9 @@ import (
 	"github.com/artni96/url-shortener/internal/repository/users"
 	"github.com/artni96/url-shortener/internal/service"
 	"github.com/artni96/url-shortener/internal/utility"
-	"github.com/stretchr/testify/assert"
-	"go.uber.org/zap"
 )
 
-func testHandler(t *testing.T) *URLHandler {
+func URLTestHandler(t *testing.T) *URLHandler {
 	tempDir := t.TempDir()
 	testFile := filepath.Join(tempDir, "data.json")
 	testLogger := zap.NewNop()
@@ -39,10 +40,13 @@ func testHandler(t *testing.T) *URLHandler {
 		SecretKey:       "dontshareme",
 	}
 
+	auditChan := make(chan model.AuditEntity, 10)
+
 	app := config.App{
-		DB:     nil,
-		Cfg:    &cfg,
-		Logger: testLogger,
+		DB:        nil,
+		Cfg:       &cfg,
+		Logger:    testLogger,
+		AuditChan: auditChan,
 	}
 
 	testDB, err := db.InitDBConnection(ctx, &app)
@@ -58,11 +62,12 @@ func testHandler(t *testing.T) *URLHandler {
 	urlService := service.NewURLService(nil, urlInMemoryRepository, &app)
 	userService := service.NewUserService(nil, userInMemoryRepository, &app)
 	h := NewURLHandler(&ctx, &app, urlService, userService, &cfg)
+
 	return h
 }
 
 func TestShortenURL(t *testing.T) {
-	h := testHandler(t)
+	h := URLTestHandler(t)
 
 	type want struct {
 		contentType string
@@ -153,7 +158,7 @@ func TestShortenURL(t *testing.T) {
 }
 
 func TestCreateURLHandler(t *testing.T) {
-	h := testHandler(t)
+	h := URLTestHandler(t)
 
 	type want struct {
 		status      int
@@ -241,7 +246,7 @@ func TestCreateURLHandler(t *testing.T) {
 }
 
 func TestGetURLHandler(t *testing.T) {
-	h := testHandler(t)
+	h := URLTestHandler(t)
 
 	type request struct {
 		method string
@@ -312,7 +317,7 @@ func TestGetURLHandler(t *testing.T) {
 }
 
 func TestBulkCreateURLHandler(t *testing.T) {
-	h := testHandler(t)
+	h := URLTestHandler(t)
 
 	type want struct {
 		status      int
@@ -415,7 +420,7 @@ func TestBulkCreateURLHandler(t *testing.T) {
 }
 
 func TestGetListHandler(t *testing.T) {
-	h := testHandler(t)
+	h := URLTestHandler(t)
 
 	type want struct {
 		status      int
@@ -461,7 +466,7 @@ func TestGetListHandler(t *testing.T) {
 }
 
 func TestUpdateURLHandler(t *testing.T) {
-	h := testHandler(t)
+	h := URLTestHandler(t)
 
 	type want struct {
 		status      int
@@ -557,7 +562,7 @@ func TestUpdateURLHandler(t *testing.T) {
 }
 
 func TestDeleteURLHandler(t *testing.T) {
-	h := testHandler(t)
+	h := URLTestHandler(t)
 
 	type want struct {
 		status      int
@@ -630,7 +635,7 @@ func TestDeleteURLHandler(t *testing.T) {
 }
 
 func TestGetUserListHandler(t *testing.T) {
-	h := testHandler(t)
+	h := URLTestHandler(t)
 
 	token, err := h.userService.BuildJWTString(1, h.cfg)
 	if err != nil {
@@ -732,7 +737,7 @@ func TestGetUserListHandler(t *testing.T) {
 }
 
 func TestBulkDeleteURLHandler(t *testing.T) {
-	h := testHandler(t)
+	h := URLTestHandler(t)
 	userID1 := 1
 
 	token1, err := h.userService.BuildJWTString(userID1, h.cfg)
@@ -901,7 +906,6 @@ func TestBulkDeleteURLHandler(t *testing.T) {
 			assert.Equal(t, tt.want.contentType, w3.Result().Header.Get("Content-Type"))
 
 			for _, urlData := range shortURLListWithStatus {
-				fmt.Println(urlData)
 				w := httptest.NewRecorder()
 				req1 := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/%s", urlData.url), nil)
 				h.GetURLHandler(w, req1)
