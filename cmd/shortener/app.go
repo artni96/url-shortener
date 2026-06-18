@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -28,6 +29,10 @@ import (
 func run(cfg *config.Config) error {
 	ctx := context.Background()
 	appLogger, err := logger.InitLogger(cfg.DebugLevel)
+	if err != nil {
+		log.Fatalf("failed to initialize application logger: %v", err)
+		return err
+	}
 	auditChan := make(chan model.AuditEntity, 100)
 
 	app := &config.App{

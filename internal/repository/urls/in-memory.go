@@ -379,7 +379,7 @@ func (repo *InMemoryURLRepository) uploadInMemoryStorage(filepath string) error 
 		return nil
 	}
 	defer func(fileReader *FileScanner) {
-		err := fileReader.Close()
+		err = fileReader.Close()
 		if err != nil {
 			repo.logger.Info("could not close file reader", zap.String("filepath", filepath))
 		}
