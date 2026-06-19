@@ -46,3 +46,8 @@ git fetch template && git checkout template/v2 .github
 
 ## Документация
 /swagger/index.html
+
+## Запуск кастомного анализатора
+Команды для запуска:
+- MacOS - `make check-darwin PACKAGE="<path>"` или всего проекта `make check-darwin`
+- Linux - `make check-linux PACKAGE="<path>"` или всего проекта `make check-linux`
