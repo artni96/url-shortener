@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jmoiron/sqlx"
@@ -246,19 +247,29 @@ func (repo *DBURLRepository) Delete(ctx context.Context, shortURL string) error 
 
 // IsURLListUnique checks whether the whole list of generated short URL values is unique.
 func (repo *DBURLRepository) IsURLListUnique(ctx context.Context, shortURLList []string) (bool, error) {
-	query := "SELECT original_url FROM urls WHERE short_url IN ($1)"
-	stmt, err := repo.db.PrepareContext(ctx, query)
-	if err != nil {
-		return false, fmt.Errorf("failed to prepare statement: %w", err)
+	placeholders := make([]string, len(shortURLList))
+	args := make([]interface{}, len(shortURLList))
+	for i, url := range shortURLList {
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
+		args[i] = url
 	}
-	result, err := stmt.QueryContext(ctx, shortURLList)
+
+	query := fmt.Sprintf(
+		"SELECT short_url FROM urls WHERE short_url IN (%s)",
+		strings.Join(placeholders, ", "),
+	)
+
+	rows, err := repo.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return false, fmt.Errorf("failed to execute request: %w", err)
+		return false, fmt.Errorf("failed to query URLs: %w", err)
 	}
-	if result != nil {
+	defer rows.Close()
+
+	if rows.Next() {
 		return false, ErrURLListIsNotUnique
 	}
-	return true, nil
+
+	return true, rows.Err()
 }
 
 // NewDBURLRepository returns a new DBURLRepository.
