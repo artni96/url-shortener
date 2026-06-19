@@ -113,8 +113,8 @@ func (h *URLHandler) ShortenURLHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		} else if errors.Is(err, urls.ErrOriginalURLAlreadyExists) {
 			w.WriteHeader(http.StatusConflict)
-			resp, err := json.Marshal(responseData)
-			if err != nil {
+			resp, marshalErr := json.Marshal(responseData)
+			if marshalErr != nil {
 				handler.ErrorResponse(w, fmt.Sprintf("Could not create short URL for %s", body.OriginalURL), http.StatusInternalServerError, h.logger)
 				return
 			}
