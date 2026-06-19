@@ -55,6 +55,9 @@ func URLTestHandler(t *testing.T) *URLHandler {
 	}
 
 	urlInMemoryRepository, err := urls.NewInMemoryURLRepository(&app)
+	if err != nil {
+		t.Fatal(err)
+	}
 	userInMemoryRepository, err := users.NewInMemoryUserRepository(&app)
 	if err != nil {
 		t.Fatal(err)
@@ -556,6 +559,9 @@ func TestUpdateURLHandler(t *testing.T) {
 			defer res.Body.Close()
 			assert.Equal(t, tt.want.status, res.StatusCode)
 			resBody, err := io.ReadAll(res.Body)
+			if err != nil {
+				t.Fatal(err)
+			}
 			assert.JSONEq(t, tt.want.message, string(resBody))
 		})
 	}
@@ -826,6 +832,9 @@ func TestBulkDeleteURLHandler(t *testing.T) {
 			defer respBody1.Close()
 
 			bulkCreateReqBodyResp1, err := io.ReadAll(respBody1)
+			if err != nil {
+				t.Fatal(err)
+			}
 			var URLList1 []model.URLBulkCreate
 			err = json.Unmarshal(bulkCreateReqBodyResp1, &URLList1)
 			if err != nil {
@@ -834,9 +843,9 @@ func TestBulkDeleteURLHandler(t *testing.T) {
 
 			var shortURLListWithStatus []Result
 			for _, urlData := range URLList1 {
-				uri, err := url.Parse(urlData.ShortURL)
-				if err != nil {
-					t.Fatal(err)
+				uri, parseErr := url.Parse(urlData.ShortURL)
+				if parseErr != nil {
+					t.Fatal(parseErr)
 				}
 				shortURLListWithStatus = append(shortURLListWithStatus, Result{
 					status: http.StatusGone,
@@ -872,6 +881,9 @@ func TestBulkDeleteURLHandler(t *testing.T) {
 			defer respBody2.Close()
 
 			bulkCreateReqBodyResp2, err := io.ReadAll(respBody2)
+			if err != nil {
+				t.Fatal(err)
+			}
 			var URLList2 []model.URLBulkCreate
 			err = json.Unmarshal(bulkCreateReqBodyResp2, &URLList2)
 			if err != nil {
@@ -879,9 +891,9 @@ func TestBulkDeleteURLHandler(t *testing.T) {
 			}
 
 			for _, urlData := range URLList2 {
-				uri, err := url.Parse(urlData.ShortURL)
-				if err != nil {
-					t.Fatal(err)
+				uri, parseErr := url.Parse(urlData.ShortURL)
+				if parseErr != nil {
+					t.Fatal(parseErr)
 				}
 				shortURLListWithStatus = append(shortURLListWithStatus, Result{
 					status: http.StatusTemporaryRedirect,
@@ -898,6 +910,9 @@ func TestBulkDeleteURLHandler(t *testing.T) {
 			}
 
 			bodyBytes, err := json.Marshal(shortURLList)
+			if err != nil {
+				t.Fatal(err)
+			}
 			req := httptest.NewRequest(http.MethodDelete, "/api/user/urls", strings.NewReader(string(bodyBytes)))
 			req.AddCookie(cookie1)
 			w3 := httptest.NewRecorder()

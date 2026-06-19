@@ -49,6 +49,9 @@ func URLTestBenchHandler(b *testing.B) *URLHandler {
 	}
 
 	urlInMemoryRepository, err := urls.NewInMemoryURLRepository(&app)
+	if err != nil {
+		b.Fatal(err)
+	}
 	userInMemoryRepository, err := users.NewInMemoryUserRepository(&app)
 	if err != nil {
 		b.Fatal(err)
@@ -239,6 +242,9 @@ func BenchmarkURLHandlers(b *testing.B) {
 		defer respBody1.Close()
 
 		bulkCreateReqBodyResp1, err := io.ReadAll(respBody1)
+		if err != nil {
+			b.Fatal(err)
+		}
 		var URLList1 []model.URLBulkCreate
 		err = json.Unmarshal(bulkCreateReqBodyResp1, &URLList1)
 		if err != nil {
@@ -247,9 +253,9 @@ func BenchmarkURLHandlers(b *testing.B) {
 
 		var shortURLListWithStatus []Result
 		for _, urlData := range URLList1 {
-			uri, err := url.Parse(urlData.ShortURL)
-			if err != nil {
-				b.Fatal(err)
+			uri, parseErr := url.Parse(urlData.ShortURL)
+			if parseErr != nil {
+				b.Fatal(parseErr)
 			}
 			shortURLListWithStatus = append(shortURLListWithStatus, Result{
 				status: http.StatusGone,
@@ -262,6 +268,9 @@ func BenchmarkURLHandlers(b *testing.B) {
 			shortURLList = append(shortURLList, urlData.url)
 		}
 		bodyBytes, err := json.Marshal(shortURLList)
+		if err != nil {
+			b.Fatal(err)
+		}
 
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {

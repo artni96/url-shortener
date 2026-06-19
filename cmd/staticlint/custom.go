@@ -7,8 +7,8 @@ import (
 )
 
 var ErrOsExitAnalyzer = &analysis.Analyzer{
-	Name: "errcheck",
-	Doc:  "check for unchecked errors",
+	Name: "OsExitAnalyzer",
+	Doc:  "check whether os.Exit called in main function or not",
 	Run:  run,
 }
 

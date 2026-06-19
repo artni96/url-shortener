@@ -38,6 +38,10 @@ func (s *HTTPSink) Sink(obj model.AuditEntity) error {
 	}
 	stringBody := strings.NewReader(string(byteBody))
 	req, err := http.NewRequest("POST", s.app.Cfg.AuditURL, stringBody)
+	if err != nil {
+		s.app.Logger.Error("failed to create audit entity", zap.Error(err))
+		return err
+	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := s.client.Do(req)

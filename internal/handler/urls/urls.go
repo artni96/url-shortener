@@ -113,8 +113,8 @@ func (h *URLHandler) ShortenURLHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		} else if errors.Is(err, urls.ErrOriginalURLAlreadyExists) {
 			w.WriteHeader(http.StatusConflict)
-			resp, err := json.Marshal(responseData)
-			if err != nil {
+			resp, marshalErr := json.Marshal(responseData)
+			if marshalErr != nil {
 				handler.ErrorResponse(w, fmt.Sprintf("Could not create short URL for %s", body.OriginalURL), http.StatusInternalServerError, h.logger)
 				return
 			}
@@ -436,8 +436,8 @@ func (h *URLHandler) UpdateURLHandler(w http.ResponseWriter, r *http.Request) {
 				Result: entityToUpdate.OriginalURL,
 			}
 			w.WriteHeader(http.StatusConflict)
-			resp, err := json.Marshal(responseData)
-			if err != nil {
+			resp, marshalErr := json.Marshal(responseData)
+			if marshalErr != nil {
 				handler.ErrorResponse(w, fmt.Sprintf("Could not create short URL for %s", body.OriginalURL), http.StatusInternalServerError, h.logger)
 				return
 			}
@@ -523,6 +523,9 @@ func (h *URLHandler) BulkDeleteURLHandler(w http.ResponseWriter, r *http.Request
 			})
 		}
 		err = h.urlService.BulkDelete(localCtx, urlsToDelete)
+		if err != nil {
+			h.logger.Info("failed to bulk delete urls", zap.Error(err))
+		}
 		defer wg.Done()
 	}()
 	wg.Wait()
@@ -542,9 +545,9 @@ func getOrCreateUserID(h *URLHandler, w http.ResponseWriter, r *http.Request) (i
 			}
 			userID = user.ID
 		}
-		token, err := h.userService.Login(userID, h.cfg)
-		if err != nil {
-			return -1, fmt.Errorf("could not create token: %w", err)
+		token, servErr := h.userService.Login(userID, h.cfg)
+		if servErr != nil {
+			return -1, fmt.Errorf("could not create token: %w", servErr)
 		}
 		http.SetCookie(w, &http.Cookie{
 			Name:     "Authorization",

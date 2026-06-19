@@ -15,6 +15,7 @@ import (
 )
 
 var ErrFailedToCreated = errors.New("could not create ShortURL")
+var ErrURLListNotUnique = errors.New("url list is not unique")
 
 // URLServiceInterface encapsulates usecase logic for URL entities.
 type URLServiceInterface interface {
@@ -188,15 +189,27 @@ func (s *URLService) BulkCreate(ctx context.Context, urls []model.URLBulkCreateR
 	// проверяем уникальность сгенерированного списка shortURL одним запросом
 	for !isURLListUnique {
 		generatedURLList, err := utility.BulkGenerateShortURL(len(urls), 10)
+		if err != nil {
+			return nil, fmt.Errorf("%w", err)
+		}
 		if s.dbRepository != nil {
 			isURLListUnique, err = s.dbRepository.IsURLListUnique(ctx, generatedURLList)
+			if !isURLListUnique {
+				return nil, ErrURLListNotUnique
+			}
+			if err != nil {
+				return nil, fmt.Errorf("%w", err)
+			}
 		} else {
 			isURLListUnique, err = s.inMemoryRepository.IsURLListUnique(generatedURLList)
+			if !isURLListUnique {
+				return nil, ErrURLListNotUnique
+			}
+			if err != nil {
+				return nil, fmt.Errorf("%w", err)
+			}
 		}
 
-		if err != nil {
-			isURLListUnique = false
-		}
 		isURLListUnique = true
 		urlList = generatedURLList
 	}

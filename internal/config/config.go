@@ -90,6 +90,9 @@ func ParseFlags() (*Config, error) {
 	tokenExp, ok := os.LookupEnv("TOKEN_EXPIRATION")
 	if ok {
 		conf.TokenExp, err = time.ParseDuration(tokenExp)
+		if err != nil {
+			return nil, err
+		}
 	} else {
 		conf.TokenExp = time.Minute * 1
 	}

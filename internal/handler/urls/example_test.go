@@ -49,6 +49,9 @@ func URLExampleHandler() *URLHandler {
 	}
 
 	urlInMemoryRepository, err := urls.NewInMemoryURLRepository(&app)
+	if err != nil {
+		log.Fatal(err)
+	}
 	userInMemoryRepository, err := users.NewInMemoryUserRepository(&app)
 	if err != nil {
 		log.Fatal(err)
