@@ -11,6 +11,9 @@ import (
 	"honnef.co/go/tools/staticcheck"
 )
 
+// Custom analyzer
+// Command to run from the root: go vet -vettool=./cmd/staticlint/multicheck <path>
+// The path value might be any directories or file. For example, ./...
 func main() {
 	mychecks := []*analysis.Analyzer{
 		printf.Analyzer,

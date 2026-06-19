@@ -204,7 +204,6 @@ func (s *URLService) BulkCreate(ctx context.Context, urls []model.URLBulkCreateR
 			}
 		}
 
-		//isURLListUnique = true
 		urlList = generatedURLList
 	}
 
