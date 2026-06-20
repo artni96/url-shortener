@@ -17,7 +17,6 @@ import (
 type FieldInfo struct {
 	Name         string
 	DefaultValue string
-	IsSlice      bool
 }
 
 type StructInfo struct {
@@ -60,20 +59,13 @@ func main() {
 }
 
 func processDirectory(dir string) error {
-	var allStructs []StructInfo
+	var result []StructInfo
 	var pkgName string
 
 	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
+			log.Fatal(err)
 			return err
-		}
-
-		if info.IsDir() {
-			name := info.Name()
-			if strings.HasPrefix(name, ".") || name == "vendor" || name == "testdata" || name == "node_modules" {
-				return filepath.SkipDir
-			}
-			return nil
 		}
 
 		if !strings.HasSuffix(path, ".go") {
@@ -82,26 +74,25 @@ func processDirectory(dir string) error {
 
 		content, err := os.ReadFile(path)
 		if err != nil {
+			log.Fatal("Error reading file: ", path)
 			return nil
 		}
 		fset := token.NewFileSet()
 		file, err := parser.ParseFile(fset, path, content, parser.ParseComments)
 		if err != nil {
+			log.Fatal("Error parsing file: ", path)
 			return nil
 		}
 
 		if file.Name != nil {
-			if pkgName == "" {
-				pkgName = file.Name.Name
-			} else if pkgName != file.Name.Name {
-				return nil
-			}
+			pkgName = file.Name.Name
 		}
-		structsInFile := findStructsWithResetComment(file)
-		if len(structsInFile) > 0 {
-			for _, s := range structsInFile {
+
+		fileStructs := lookForStructs(file)
+		if len(fileStructs) > 0 {
+			for _, s := range fileStructs {
 				s.PackageName = file.Name.Name
-				allStructs = append(allStructs, s)
+				result = append(result, s)
 			}
 		}
 
@@ -109,17 +100,17 @@ func processDirectory(dir string) error {
 	})
 
 	if err != nil {
+		log.Fatal(fmt.Errorf("Error: %v\n", err))
 		return err
 	}
 
-	if len(allStructs) == 0 {
-		return nil
+	if len(result) != 0 {
+		return createFile(dir, pkgName, result)
 	}
-
-	return generateResetFile(dir, pkgName, allStructs)
+	return nil
 }
 
-func findStructsWithResetComment(file *ast.File) []StructInfo {
+func lookForStructs(file *ast.File) []StructInfo {
 	var structs []StructInfo
 
 	ast.Inspect(file, func(n ast.Node) bool {
@@ -195,7 +186,7 @@ func getDefaultValue(typeName string) string {
 	}
 }
 
-func generateResetFile(dir, pkgName string, structs []StructInfo) error {
+func createFile(dir, pkgName string, structs []StructInfo) error {
 	data := TemplateData{
 		PackageName: pkgName,
 		Structs:     structs,
@@ -203,25 +194,28 @@ func generateResetFile(dir, pkgName string, structs []StructInfo) error {
 
 	tmpl, err := template.New("reset").Parse(resetTemplate)
 	if err != nil {
+		log.Printf("failed to parse template: %v", err)
 		return fmt.Errorf("failed to parse template: %v", err)
 	}
 
 	var buf bytes.Buffer
 	err = tmpl.Execute(&buf, data)
 	if err != nil {
+		log.Printf("failed to execute template: %v", err)
 		return fmt.Errorf("failed to execute template: %v", err)
 	}
 
 	formatted, err := format.Source(buf.Bytes())
 	if err != nil {
-		fmt.Printf("Warning: could not format generated code: %v\n", err)
 		formatted = buf.Bytes()
 	}
 
 	outputPath := filepath.Join(dir, "reset.gen.go")
 	err = os.WriteFile(outputPath, formatted, 0644)
 	if err != nil {
-		return fmt.Errorf("failed to write %s: %v", outputPath, err)
+		log.Printf("failed to write file %s: %v", outputPath, err)
+		return fmt.Errorf("failed to write file %s: %v", outputPath, err)
 	}
+	fmt.Printf("file successfully created - %s\n", outputPath)
 	return nil
 }
