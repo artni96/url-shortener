@@ -1,0 +1,89 @@
+package model
+
+func (s *AuditEntity) Reset() {
+	s.Ts = 0
+	s.Action = ""
+	s.UserID = 0
+	s.URL = ""
+}
+
+func (s *URLCreateRequestWithoutUser) Reset() {
+	s.OriginalURL = ""
+}
+
+func (s *URLCreateRequest) Reset() {
+	s.OriginalURL = ""
+	s.CreatedBy = 0
+}
+
+func (s *URLCreate) Reset() {
+	s.OriginalURL = ""
+	s.ShortURL = ""
+	s.CreatedBy = 0
+}
+
+func (s *URLCreateResponse) Reset() {
+	s.ID = ""
+	s.Result = ""
+}
+
+func (s *GetByShortURLResponse) Reset() {
+	s.OriginalURL = ""
+	s.ShortURL = ""
+	s.IsDeleted = false
+}
+
+func (s *URLEntity) Reset() {
+	s.OriginalURL = ""
+	s.ShortURL = ""
+	s.CreatedBy = 0
+	s.IsDeleted = false
+}
+
+func (s *URLListEntity) Reset() {
+	s.OriginalURL = ""
+	s.ShortURL = ""
+}
+
+func (s *URLBulkCreateRequestWithoutUser) Reset() {
+	s.CorrelationID = ""
+	s.OriginalURL = ""
+}
+
+func (s *URLBulkCreateRequest) Reset() {
+	s.CorrelationID = ""
+	s.OriginalURL = ""
+	s.CreatedBy = 0
+}
+
+func (s *URLBulkCreate) Reset() {
+	s.CorrelationID = ""
+	s.ShortURL = ""
+	s.OriginalURL = ""
+	s.CreatedBy = 0
+}
+
+func (s *URLBulkCreateResponse) Reset() {
+	s.CorrelationID = ""
+	s.ShortURL = ""
+}
+
+func (s *URLNestedData) Reset() {
+	s.OriginalURL = ""
+	s.CreatedBy = 0
+	s.IsDeleted = false
+}
+
+func (s *URLUpdateResponse) Reset() {
+	s.OriginalURL = ""
+}
+
+func (s *URLDelete) Reset() {
+	s.ShortURL = ""
+	s.CreatedBy = 0
+}
+
+func (s *User) Reset() {
+	s.ID = 0
+	s.IP = ""
+}
