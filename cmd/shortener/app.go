@@ -136,10 +136,12 @@ func run(cfg *config.Config) error {
 	}()
 	select {
 	case <-gsCtx.Done():
-		if err = app.DB.Close(); err != nil {
-			app.Logger.Info("failed to close database", zap.Error(err))
-		} else if app.DB == nil {
-			app.Logger.Info("database connection closed gracefully ")
+		if app.DB != nil {
+			if err = app.DB.Close(); err != nil {
+				app.Logger.Info("failed to close database", zap.Error(err))
+			} else if app.DB == nil {
+				app.Logger.Info("database connection closed gracefully ")
+			}
 		}
 	}
 
