@@ -51,3 +51,10 @@ git fetch template && git checkout template/v2 .github
 Команды для запуска:
 - MacOS - `make check-darwin PACKAGE="<path>"` или всего проекта `make check-darwin`
 - Linux - `make check-linux PACKAGE="<path>"` или всего проекта `make check-linux`
+
+## Запуск утилиты, генерирующая функции очистки для структур
+Команда для запуска - `make run-reset`
+
+## Сборка приложения
+- MacOS - `make build-darwin VERSION=<any> COMMIT=<any>`
+- Linux - `make build-linux VERSION=<any> COMMIT=<any>`
