@@ -22,10 +22,9 @@ check-linux:
 	@echo "Running custom static analysis for linux"
 	GOARCH=amd64 GOOS=linux go vet -vettool=./cmd/staticlint/multicheck $(PACKAGES)
 
-BINARY_COMMIT := $(shell ./$(BINARY) --version 2>/dev/null | grep Commit | cut -d':' -f2 | xargs || echo "none")
-BINARY := shortener-darwin
+COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null)
 
 .PHONY: build-darwin,
 build-darwin:
-	@echo "Building the app for darwin"
-	GOARCH=arm64 GOOS=darwin go build -ldflags="-X main.buildVersion=$(VERSION) -X 'main.buildDate=$$(date +'%Y/%m/%d %H:%M:%S')' -X main.buildCommit=$(BINARY_COMMIT)" -o ./shortener-darwin ./cmd/shortener
+	@echo "Building app for darwin"
+	GOARCH=arm64 GOOS=darwin go build -ldflags="-X main.buildVersion=$(VERSION) -X 'main.buildDate=$$(date +'%Y/%m/%d %H:%M:%S')' -X main.buildCommit=$(COMMIT)" -o ./shortener-darwin ./cmd/shortener
