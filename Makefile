@@ -35,5 +35,5 @@ build-darwin:
 
 .PHONY: build-linux
 build-linux:
-	@echo "Building app for darwin"
-	GOARCH=amd64 GOOS=linux go build -ldflags="-X main.buildVersion=$(VERSION) -X 'main.buildDate=$$(date +'%Y/%m/%d %H:%M:%S')' -X main.buildCommit=$(COMMIT)" -o ./shortener-darwin ./cmd/shortener
+	@echo "Building app for linux"
+	GOARCH=amd64 GOOS=linux go build -ldflags="-X main.buildVersion=$(VERSION) -X 'main.buildDate=$$(date +'%Y/%m/%d %H:%M:%S')' -X main.buildCommit=$(COMMIT)" -o ./shortener-linux ./cmd/shortener

@@ -1,10 +1,12 @@
 package model
 
+// URLCreateRequestWithoutUser represents a URL entity for creation without user data.
 // generate:reset
 type URLCreateRequestWithoutUser struct {
 	OriginalURL string `json:"url"`
 }
 
+// URLCreateRequest represents.
 // generate:reset
 type URLCreateRequest struct {
 	OriginalURL string `json:"url"`

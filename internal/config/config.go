@@ -99,6 +99,7 @@ func ParseFlags() (*Config, error) {
 	return &conf, nil
 }
 
+// generate:reset
 type App struct {
 	DB        *sqlx.DB
 	Cfg       *Config

@@ -17,6 +17,7 @@ type AuditSink interface {
 	Close()
 }
 
+// generate:reset
 type HTTPSink struct {
 	client *http.Client
 	app    *config.App

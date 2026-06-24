@@ -14,10 +14,17 @@ import (
 )
 
 // AuditWriter is an object to write Audit data into the file.
+// generate:reset
 type AuditWriter struct {
 	file   *os.File
 	writer *bufio.Writer
 	mu     sync.Mutex
+}
+
+// generate:reset
+type Test struct {
+	f map[string]string
+	p *AuditWriter
 }
 
 // NewAuditWriter returns a new AuditWriter.
