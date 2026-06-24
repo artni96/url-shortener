@@ -21,12 +21,6 @@ type AuditWriter struct {
 	mu     sync.Mutex
 }
 
-// generate:reset
-type Test struct {
-	f map[string]string
-	p *AuditWriter
-}
-
 // NewAuditWriter returns a new AuditWriter.
 func NewAuditWriter(filename string) (*AuditWriter, error) {
 	file, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)

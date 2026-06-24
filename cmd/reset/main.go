@@ -189,7 +189,7 @@ func getDefaultValue(field *ast.Field) string {
 		case *ast.Ident:
 			x := v.X.(*ast.Ident).Name
 			stmt := fmt.Sprintf("if s.%s != nil {\n    v := reflect.ValueOf(s.%s)\n    method := v.MethodByName(\"Reset\")\n    if method.IsValid() {        method.Call(nil)\n        return\n    } else {\n        s.%s = &%s{}\n    }}", field.Names[0].Name, field.Names[0].Name, field.Names[0].Name, x)
-			return fmt.Sprintf(stmt)
+			return stmt
 		}
 	case *ast.SelectorExpr:
 		sel := v.Sel.Name
