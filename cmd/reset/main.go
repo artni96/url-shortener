@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"flag"
 	"fmt"
 	"go/ast"
 	"go/format"
@@ -49,7 +50,19 @@ func (s *{{.StructName}}) Reset() {
 `
 
 func main() {
-	absDirPath, err := filepath.Abs(".")
+	var dir string
+	fs := flag.NewFlagSet("fs", flag.ExitOnError)
+	fs.StringVar(&dir, "dir", ".", "absolute path to the directory")
+	err := fs.Parse(os.Args[1:])
+	if err != nil {
+		log.Fatal(err)
+	}
+	envDir, ok := os.LookupEnv("DIR")
+	if ok {
+		dir = envDir
+	}
+	absDirPath, err := filepath.Abs(dir)
+
 	if err != nil {
 		log.Fatal(fmt.Errorf("failed to get absolute path: %v\n", err))
 	}
