@@ -2,6 +2,13 @@
 
 package config
 
+import (
+	"reflect"
+
+	"github.com/jmoiron/sqlx"
+	"go.uber.org/zap"
+)
+
 func (s *App) Reset() {
 	if s.DB != nil {
 		*s.DB = sqlx.DB{}
