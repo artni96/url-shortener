@@ -35,9 +35,9 @@ run-reset:
 .PHONY: build-darwin
 build-darwin:
 	@echo "Building app for darwin"
-	GOARCH=arm64 GOOS=darwin go build -ldflags="-X main.buildVersion=$(VERSION) -X 'main.buildDate=$$(date +'%Y/%m/%d %H:%M:%S')' -X main.buildCommit=$(COMMIT)" -o ./shortener-darwin ./cmd/shortener
+	GOARCH=arm64 GOOS=darwin go build -ldflags="-X main.buildVersion=$(VERSION) -X 'main.buildDate=$$(date +'%Y/%m/%d-%H:%M:%S')' -X main.buildCommit=$(COMMIT)" -o ./shortener-darwin ./cmd/shortener
 
 .PHONY: build-linux
 build-linux:
 	@echo "Building app for linux"
-	GOARCH=amd64 GOOS=linux go build -ldflags="-X main.buildVersion=$(VERSION) -X 'main.buildDate=$$(date +'%Y/%m/%d %H:%M:%S')' -X main.buildCommit=$(COMMIT)" -o ./shortener-linux ./cmd/shortener
+	GOARCH=amd64 GOOS=linux go build -ldflags="-X main.buildVersion=$(VERSION) -X 'main.buildDate=$$(date +'%Y/%m/%d-%H:%M:%S')' -X main.buildCommit=$(COMMIT)" -o ./shortener-linux ./cmd/shortener

@@ -28,7 +28,8 @@ func run(pass *analysis.Pass) (interface{}, error) {
 					}
 
 					if slc, ok := callExpr.Fun.(*ast.SelectorExpr); ok {
-						if pkg, ok := slc.X.(*ast.Ident); ok && pkg.Name != "main" && slc.Sel.Name == "Exit" {
+						xType := pass.TypesInfo.Uses[slc.X.(*ast.Ident)].Name()
+						if pkg, ok := slc.X.(*ast.Ident); ok && pkg.Name != "main" && slc.Sel.Name == "Exit" && xType == "os" {
 							pass.Reportf(callExpr.Pos(), "it's not allowed to call os.Exit in main function")
 						}
 					}

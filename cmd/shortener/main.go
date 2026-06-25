@@ -9,9 +9,9 @@ import (
 	"github.com/artni96/url-shortener/internal/config"
 )
 
-var buildVersion string
-var buildDate string
-var buildCommit string
+var buildVersion = "N/A"
+var buildDate = "N/A"
+var buildCommit = "N/A"
 
 // @title URL-shortener
 // @version 1.0
@@ -19,15 +19,6 @@ var buildCommit string
 // @host localhost:8080
 // BasePath /
 func main() {
-	if buildVersion == "" {
-		buildVersion = "N/A"
-	}
-	if buildDate == "" {
-		buildDate = "N/A"
-	}
-	if buildCommit == "" {
-		buildCommit = "N/A"
-	}
 	fmt.Println("Build version: " + buildVersion)
 	fmt.Println("Build date: " + buildDate)
 	fmt.Println("Build commit: " + buildCommit)

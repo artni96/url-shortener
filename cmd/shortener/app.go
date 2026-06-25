@@ -27,6 +27,7 @@ import (
 )
 
 func run(cfg *config.Config) error {
+
 	ctx := context.Background()
 	appLogger, err := logger.InitLogger(cfg.DebugLevel)
 	if err != nil {
@@ -151,5 +152,6 @@ func run(cfg *config.Config) error {
 		app.Logger.Info("server stopped gracefully")
 	}
 	app.Logger.Info("app stopped gracefully")
+
 	return nil
 }

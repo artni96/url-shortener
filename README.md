@@ -56,5 +56,11 @@ git fetch template && git checkout template/v2 .github
 Команда для запуска - `make run-reset`
 
 ## Сборка приложения
+Команда для сборки `go build -ldflags="-X main.buildVersion=<VERSION> -X 'main.buildDate=<DATETIME>' -X main.buildCommit=<COMMIT>" -o ./shortener ./cmd/shortener`
+Дефолтный значения `Build version`, `Build date`, `Build commit` - `N/A`
+
+Через Makefile
 - MacOS - `make build-darwin VERSION=<any> COMMIT=<any>`
 - Linux - `make build-linux VERSION=<any> COMMIT=<any>`
+
+Дефолтный значения `Build version`, `Build commit` - `N/A`, `Build date` - текущее время (utc+3 hourse) в формате - `'%Y/%m/%d-%H:%M:%S` 
