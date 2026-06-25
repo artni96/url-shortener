@@ -15,11 +15,15 @@ help:
 
 .PHONY: check-darwin
 check-darwin:
+	@echo building multicheck binary
+	GOARCH=arm64 GOOS=darwin go build -o ./cmd/staticlint/multicheck ./cmd/staticlint
 	@echo "Running custom static analysis for macOS"
 	GOARCH=arm64 GOOS=darwin go vet -vettool=./cmd/staticlint/multicheck $(PACKAGES)
 
 .PHONY: check-linux
 check-linux:
+	@echo building multicheck binary
+	GOARCH=arm64 GOOS=darwin go build -o ./cmd/staticlint/multicheck ./cmd/staticlint
 	@echo "Running custom static analysis for linux"
 	GOARCH=amd64 GOOS=linux go vet -vettool=./cmd/staticlint/multicheck $(PACKAGES)
 

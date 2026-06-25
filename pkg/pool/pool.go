@@ -1,6 +1,11 @@
-package main
+package pool
 
-import "sync"
+import (
+	"errors"
+	"sync"
+)
+
+var ErrFuncNil = errors.New("pool function is nil")
 
 type hasReset interface {
 	Reset()
@@ -10,14 +15,17 @@ type Pool[T hasReset] struct {
 	pool *sync.Pool
 }
 
-func New[T hasReset](f func() T) *Pool[T] {
+func New[T hasReset](f func() T) (*Pool[T], error) {
+	if f == nil {
+		return nil, ErrFuncNil
+	}
 	return &Pool[T]{
 		pool: &sync.Pool{
 			New: func() any {
 				return f()
 			},
 		},
-	}
+	}, nil
 }
 
 func (p *Pool[T]) Get() T {
