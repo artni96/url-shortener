@@ -33,16 +33,19 @@ func TestNew(t *testing.T) {
 			expectErr: true,
 		},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := New(tt.factory)
-
+			pool, err := New(tt.factory)
 			if tt.expectErr {
 				assert.Error(t, err)
 				assert.ErrorIs(t, err, ErrFuncNil)
+
 			} else {
 				assert.NoError(t, err)
+				pool.Put(tt.factory())
+				gottenObj := pool.Get()
+				expectedObj := testStruct{field: ""}
+				assert.Equal(t, *gottenObj, expectedObj)
 			}
 		})
 	}
