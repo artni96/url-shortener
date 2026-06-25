@@ -2,15 +2,6 @@
 
 package audit
 
-import (
-	"bufio"
-	"net/http"
-	"os"
-	"sync"
-
-	"github.com/artni96/url-shortener/internal/config"
-)
-
 func (s *AuditWriter) Reset() {
 	if s.file != nil {
 		*s.file = os.File{}

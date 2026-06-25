@@ -7,6 +7,7 @@ dev_log_level=debug
 PACKAGES ?= ./...
 VERSION ?= N/A
 COMMIT := $(shell git rev-parse --short HEAD)
+dir ?= ./...
 
 .PHONY: help
 help:
@@ -30,7 +31,7 @@ check-linux:
 .PHONY: run-reset
 run-reset:
 	@echo "running reset"
-	go run ./cmd/reset
+	go run ./cmd/reset -dir=$(dir)
 
 .PHONY: build-darwin
 build-darwin:
