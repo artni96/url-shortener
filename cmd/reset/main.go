@@ -14,6 +14,11 @@ import (
 	"text/template"
 )
 
+var defaultTypes = []string{
+	"bool", "string", "int", "int8", "int16", "int32", "int64", "uint", "uint8", "uint16", "uint32",
+	"uint64", "uintptr", "byte", "float32", "float64", "interface{}", "error",
+}
+
 type FieldInfo struct {
 	Name         string
 	DefaultValue string
@@ -44,7 +49,7 @@ func (s *{{.StructName}}) Reset() {
 `
 
 func main() {
-	absDirPath, err := filepath.Abs("./internal/audit")
+	absDirPath, err := filepath.Abs(".")
 	if err != nil {
 		log.Fatal(fmt.Errorf("failed to get absolute path: %v\n", err))
 	}
@@ -67,7 +72,6 @@ func processDirectory(dir string) error {
 
 	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			//log.Printf("failed to walk through directory: %s, err: %v\n", path, err)
 			return fmt.Errorf("failed to walk through directory: %s, err: %v\n", path, err)
 		}
 
@@ -83,7 +87,7 @@ func processDirectory(dir string) error {
 		fset := token.NewFileSet()
 		file, err := parser.ParseFile(fset, path, content, parser.ParseComments)
 		if err != nil {
-			log.Printf("Failed to parse file: %s, err: %v\n", path, err)
+			log.Printf("failed to parse file: %s, err: %v\n", path, err)
 			return nil
 		}
 
@@ -92,7 +96,6 @@ func processDirectory(dir string) error {
 				if len(result) > 0 {
 					err = createFile(pathToWrite, pkgName, result)
 					if err != nil {
-						//log.Printf("failed to create file: %s, err: %v\n", dir, err)
 						return fmt.Errorf("failed to create file: %s, err: %v\n", dir, err)
 					}
 				}
@@ -114,7 +117,6 @@ func processDirectory(dir string) error {
 	})
 
 	if err != nil {
-		//log.Printf("failed to walk through files error: %v\n", err)
 		return fmt.Errorf("failed to walk through files error: %v\n", err)
 	}
 
@@ -152,7 +154,7 @@ func lookForStructs(file *ast.File) []StructInfo {
 						if structType.Fields != nil && structType.Fields.List != nil {
 							for _, field := range structType.Fields.List {
 								for _, name := range field.Names {
-									defaultValue := getDefaultValue(field)
+									defaultValue := getFieldStatement(field)
 									fields = append(fields, FieldInfo{
 										Name:         name.Name,
 										DefaultValue: defaultValue,
@@ -170,16 +172,17 @@ func lookForStructs(file *ast.File) []StructInfo {
 			}
 		}
 	}
-
 	return structs
 }
 
-// getDefaultValue generates zero value according to a field type.
-func getDefaultValue(field *ast.Field) string {
+// getFieldStatement generates statement for a field.
+func getFieldStatement(field *ast.Field) string {
 	var typeName string
 	switch v := field.Type.(type) {
 	case *ast.Ident:
 		typeName = v.Name
+		defaultValue := getDefaultValue(typeName)
+		return fmt.Sprintf("s.%s = %s", field.Names[0].Name, defaultValue)
 	case *ast.StarExpr:
 		switch v.X.(type) {
 		case *ast.SelectorExpr:
@@ -188,9 +191,18 @@ func getDefaultValue(field *ast.Field) string {
 			return fmt.Sprintf("if s.%s != nil {\n    *s.%s = %s.%s{}}", field.Names[0].Name, field.Names[0].Name, x, sel)
 		case *ast.Ident:
 			x := v.X.(*ast.Ident).Name
-			stmt := fmt.Sprintf("if s.%s != nil {\n    v := reflect.ValueOf(s.%s)\n    method := v.MethodByName(\"Reset\")\n    if method.IsValid() {        method.Call(nil)\n        return\n    } else {\n        s.%s = &%s{}\n    }}", field.Names[0].Name, field.Names[0].Name, field.Names[0].Name, x)
+			for _, t := range defaultTypes {
+				if t == x {
+					defaultValue := getDefaultValue(t)
+					return fmt.Sprintf("if s.%s != nil {\n    *s.%s = %s\n}", field.Names[0].Name, field.Names[0].Name, defaultValue)
+				}
+			}
+			stmt := fmt.Sprintf("if s.%s != nil {\n    v := reflect.ValueOf(s.%s)\n    method := v.MethodByName(\"Reset\")\n    "+
+				"if method.IsValid() {        method.Call(nil)\n        return\n    } else {\n        *s.%s = %s{}\n    }}",
+				field.Names[0].Name, field.Names[0].Name, field.Names[0].Name, x)
 			return stmt
 		}
+
 	case *ast.SelectorExpr:
 		sel := v.Sel.Name
 		x := v.X.(*ast.Ident).Name
@@ -199,24 +211,30 @@ func getDefaultValue(field *ast.Field) string {
 		return fmt.Sprintf("clear(s.%s)", field.Names[0].Name)
 	case *ast.ChanType:
 		return fmt.Sprintf("s.%s = nil", field.Names[0].Name)
+	case *ast.ArrayType:
+		return fmt.Sprintf("s.%s = s.%s[:0]", field.Names[0].Name, field.Names[0].Name)
 	}
-
-	switch typeName {
-	case "bool":
-		return fmt.Sprintf("s.%s = false", field.Names[0].Name)
-	case "string":
-		return fmt.Sprintf("s.%s = \"\"", field.Names[0].Name)
-	case "int", "int8", "int16", "int32", "int64", "uint", "uint8", "uint16", "uint32", "uint64", "uintptr", "byte":
-		return fmt.Sprintf("s.%s = 0", field.Names[0].Name)
-	case "float32", "float64":
-		return fmt.Sprintf("s.%s = 0.0", field.Names[0].Name)
-	case "interface{}", "error":
-		return fmt.Sprintf("s.%s = nil", field.Names[0].Name)
-	}
-	return fmt.Sprintf("s.%s = \"\"", field.Names[0].Name)
+	return ""
 }
 
-// createFile creates a file in a package with structs with the comment `// generate:reset`.
+// getDefaultValue generates zero value according to a field type.
+func getDefaultValue(typeName string) string {
+	switch typeName {
+	case "bool":
+		return "false"
+	case "string":
+		return "\"\""
+	case "int", "int8", "int16", "int32", "int64", "uint", "uint8", "uint16", "uint32", "uint64", "uintptr", "byte":
+		return "0"
+	case "float32", "float64":
+		return "0.0"
+	case "interface{}", "error":
+		return "nil"
+	}
+	return ""
+}
+
+// createFile generates new file in a package with structs with the comment `// generate:reset`.
 func createFile(dir, pkgName string, structs []StructInfo) error {
 	data := TemplateData{
 		PackageName: pkgName,
@@ -225,14 +243,12 @@ func createFile(dir, pkgName string, structs []StructInfo) error {
 
 	tmpl, err := template.New("reset").Parse(resetTemplate)
 	if err != nil {
-		log.Printf("failed to parse resetTemplate: %v", err)
 		return fmt.Errorf("failed to parse resetTemplate: %v", err)
 	}
 
 	var buf bytes.Buffer
 	err = tmpl.Execute(&buf, data)
 	if err != nil {
-		log.Printf("failed to execute template: %v", err)
 		return fmt.Errorf("failed to execute template: %v", err)
 	}
 
@@ -244,7 +260,6 @@ func createFile(dir, pkgName string, structs []StructInfo) error {
 	outputPath := filepath.Join(dir, "reset.gen.go")
 	err = os.WriteFile(outputPath, formatted, 0644)
 	if err != nil {
-		log.Printf("failed to write file %s: %v", outputPath, err)
 		return fmt.Errorf("failed to write file %s: %v", outputPath, err)
 	}
 	fmt.Printf("file successfully created - %s\n", outputPath)
