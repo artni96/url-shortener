@@ -2,29 +2,8 @@
 
 package config
 
-import (
-	"reflect"
-
-	"github.com/jmoiron/sqlx"
-	"go.uber.org/zap"
-)
-
 func (s *App) Reset() {
 	if s.DB != nil {
 		*s.DB = sqlx.DB{}
 	}
-	if s.Cfg != nil {
-		v := reflect.ValueOf(s.Cfg)
-		method := v.MethodByName("Reset")
-		if method.IsValid() {
-			method.Call(nil)
-			return
-		} else {
-			*s.Cfg = Config{}
-		}
-	}
-	if s.Logger != nil {
-		*s.Logger = zap.Logger{}
-	}
-	s.AuditChan = nil
 }

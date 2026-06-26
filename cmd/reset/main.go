@@ -26,9 +26,13 @@ type FieldInfo struct {
 }
 
 type StructInfo struct {
-	PackageName string
-	StructName  string
-	Fields      []FieldInfo
+	StructName string
+	Fields     []FieldInfo
+}
+
+type StructData struct {
+	GenDecl *ast.GenDecl
+	Data    *ast.StructType
 }
 
 type TemplateData struct {
@@ -77,11 +81,16 @@ func main() {
 	}
 }
 
-// processDirectory goes through .go files to
+// processDirectory goes through .go files to extract and process structs with the comment `// generate:reset`.
 func processDirectory(dir string) error {
-	var result []StructInfo
+	var structsToProcess []StructData
 	var pkgName string
 	var pathToWrite string
+	var pkgStructs = make(map[string]struct {
+		PkgName string
+		Structs []StructData
+	})
+	var resettableStructs []string
 
 	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -106,43 +115,54 @@ func processDirectory(dir string) error {
 
 		if file.Name != nil {
 			if pkgName != file.Name.Name {
-				if len(result) > 0 {
-					err = createFile(pathToWrite, pkgName, result)
-					if err != nil {
-						return fmt.Errorf("failed to create file: %s, err: %v\n", dir, err)
-					}
-				}
-				result = []StructInfo{}
+				structsToProcess = []StructData{}
 			}
 			pkgName = file.Name.Name
 			splitDir := strings.Split(path, "/")
 			pathToWrite = strings.Join(splitDir[0:len(splitDir)-1], "/")
-		}
 
-		fileStructs := lookForStructs(file)
-		if len(fileStructs) > 0 {
+			fileStructs := lookForStructs(file)
 			for _, s := range fileStructs {
-				s.PackageName = file.Name.Name
-				result = append(result, s)
+				resettableStructs = append(resettableStructs, s.GenDecl.Specs[0].(*ast.TypeSpec).Name.Name)
+			}
+			if len(fileStructs) > 0 {
+				for _, s := range fileStructs {
+					structsToProcess = append(structsToProcess, s)
+				}
+
+				curPkg, ok := pkgStructs[pkgName]
+				if !ok {
+					pkgStructs[pathToWrite] = struct {
+						PkgName string
+						Structs []StructData
+					}{PkgName: pkgName, Structs: structsToProcess}
+				} else {
+					curPkg.Structs = append(pkgStructs[pathToWrite].Structs, fileStructs...)
+				}
 			}
 		}
 		return nil
+
 	})
 
 	if err != nil {
 		return fmt.Errorf("failed to walk through files error: %v\n", err)
 	}
 
-	if len(result) != 0 {
-		return createFile(dir, pkgName, result)
+	for path, data := range pkgStructs {
+		processedStructs := setDefaultValue(data.Structs, resettableStructs)
+		err = createFile(path, data.PkgName, processedStructs)
+		if err != nil {
+			return fmt.Errorf("failed to create file: %s, err: %v\n", path, err)
+		}
 	}
+
 	return nil
 }
 
-// lookForStructs search for structs with the comment `// generate:reset`
-func lookForStructs(file *ast.File) []StructInfo {
-	var structs []StructInfo
-
+// lookForStructs search for structs with the comment `// generate:reset`.
+func lookForStructs(file *ast.File) []StructData {
+	var resettableStructs []StructData
 	for _, decl := range file.Decls {
 		genDecl, ok := decl.(*ast.GenDecl)
 		if !ok {
@@ -163,33 +183,45 @@ func lookForStructs(file *ast.File) []StructInfo {
 			if genDecl.Doc != nil {
 				for _, comment := range genDecl.Doc.List {
 					if comment.Text == "// generate:reset" {
-						var fields []FieldInfo
-						if structType.Fields != nil && structType.Fields.List != nil {
-							for _, field := range structType.Fields.List {
-								for _, name := range field.Names {
-									defaultValue := getFieldStatement(field)
-									fields = append(fields, FieldInfo{
-										Name:         name.Name,
-										DefaultValue: defaultValue,
-									})
-								}
-							}
-						}
-						structs = append(structs, StructInfo{
-							StructName: genDecl.Specs[0].(*ast.TypeSpec).Name.Name,
-							Fields:     fields,
-						})
-						break
+						resettableStructs = append(resettableStructs, struct {
+							GenDecl *ast.GenDecl
+							Data    *ast.StructType
+						}{GenDecl: genDecl, Data: structType})
 					}
 				}
 			}
 		}
 	}
-	return structs
+	return resettableStructs
+}
+
+// setDefaultValue sets a default value to a field according to its type.
+func setDefaultValue(structs []StructData, resettableStructs []string) []StructInfo {
+	var result []StructInfo
+	for _, s := range structs {
+		var fields []FieldInfo
+		if s.Data.Fields != nil && s.Data.Fields.List != nil {
+			for _, field := range s.Data.Fields.List {
+				for _, name := range field.Names {
+					defaultValue := getFieldStatement(field, resettableStructs)
+					fields = append(fields, FieldInfo{
+						Name:         name.Name,
+						DefaultValue: defaultValue,
+					})
+				}
+				break
+			}
+			result = append(result, StructInfo{
+				StructName: s.GenDecl.Specs[0].(*ast.TypeSpec).Name.Name,
+				Fields:     fields,
+			})
+		}
+	}
+	return result
 }
 
 // getFieldStatement generates statement for a field.
-func getFieldStatement(field *ast.Field) string {
+func getFieldStatement(field *ast.Field, resettableStructs []string) string {
 	var typeName string
 	switch v := field.Type.(type) {
 	case *ast.Ident:
@@ -204,16 +236,20 @@ func getFieldStatement(field *ast.Field) string {
 			return fmt.Sprintf("if s.%s != nil {\n    *s.%s = %s.%s{}}", field.Names[0].Name, field.Names[0].Name, x, sel)
 		case *ast.Ident:
 			x := v.X.(*ast.Ident).Name
+			for _, r := range resettableStructs {
+				if r == x {
+					return fmt.Sprintf("s.Reset()")
+				}
+			}
 			for _, t := range defaultTypes {
 				if t == x {
 					defaultValue := getDefaultValue(t)
-					return fmt.Sprintf("if s.%s != nil {\n    *s.%s = %s\n}", field.Names[0].Name, field.Names[0].Name, defaultValue)
+					if defaultValue != "undefined" {
+						return fmt.Sprintf("if s.%s != nil {\n    *s.%s = %s\n}", field.Names[0].Name, field.Names[0].Name, defaultValue)
+					}
 				}
 			}
-			stmt := fmt.Sprintf("if s.%s != nil {\n    v := reflect.ValueOf(s.%s)\n    method := v.MethodByName(\"Reset\")\n    "+
-				"if method.IsValid() {        method.Call(nil)\n        return\n    } else {\n        *s.%s = %s{}\n    }}",
-				field.Names[0].Name, field.Names[0].Name, field.Names[0].Name, x)
-			return stmt
+			return fmt.Sprintf("*s.%s = %s{}", field.Names[0].Name, x)
 		}
 
 	case *ast.SelectorExpr:
@@ -227,7 +263,7 @@ func getFieldStatement(field *ast.Field) string {
 	case *ast.ArrayType:
 		return fmt.Sprintf("s.%s = s.%s[:0]", field.Names[0].Name, field.Names[0].Name)
 	}
-	return ""
+	return "undefined"
 }
 
 // getDefaultValue generates zero value according to a field type.
