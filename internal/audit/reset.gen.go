@@ -2,11 +2,6 @@
 
 package audit
 
-import (
-	"net/http"
-	"os"
-)
-
 func (s *AuditWriter) Reset() {
 	if s.file != nil {
 		*s.file = os.File{}

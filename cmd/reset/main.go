@@ -126,8 +126,6 @@ func processDirectory(dir string) error {
 			if len(fileStructs) > 0 {
 				for _, s := range fileStructs {
 					structsToProcess = append(structsToProcess, s)
-				}
-				for _, s := range fileStructs {
 					resettableStructs = append(resettableStructs, s.GenDecl.Specs[0].(*ast.TypeSpec).Name.Name)
 				}
 
