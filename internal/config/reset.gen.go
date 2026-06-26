@@ -2,6 +2,8 @@
 
 package config
 
+import "github.com/jmoiron/sqlx"
+
 func (s *App) Reset() {
 	if s.DB != nil {
 		*s.DB = sqlx.DB{}
