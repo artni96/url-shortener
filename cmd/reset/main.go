@@ -122,12 +122,13 @@ func processDirectory(dir string) error {
 			pathToWrite = strings.Join(splitDir[0:len(splitDir)-1], "/")
 
 			fileStructs := lookForStructs(file)
-			for _, s := range fileStructs {
-				resettableStructs = append(resettableStructs, s.GenDecl.Specs[0].(*ast.TypeSpec).Name.Name)
-			}
+
 			if len(fileStructs) > 0 {
 				for _, s := range fileStructs {
 					structsToProcess = append(structsToProcess, s)
+				}
+				for _, s := range fileStructs {
+					resettableStructs = append(resettableStructs, s.GenDecl.Specs[0].(*ast.TypeSpec).Name.Name)
 				}
 
 				curPkg, ok := pkgStructs[pkgName]
