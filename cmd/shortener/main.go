@@ -3,10 +3,15 @@
 package main
 
 import (
+	"fmt"
 	"log"
 
 	"github.com/artni96/url-shortener/internal/config"
 )
+
+var buildVersion = "N/A"
+var buildDate = "N/A"
+var buildCommit = "N/A"
 
 // @title URL-shortener
 // @version 1.0
@@ -14,6 +19,10 @@ import (
 // @host localhost:8080
 // BasePath /
 func main() {
+	fmt.Println("Build version: " + buildVersion)
+	fmt.Println("Build date: " + buildDate)
+	fmt.Println("Build commit: " + buildCommit)
+
 	cfg, err := config.ParseFlags()
 	if err != nil {
 		log.Fatal(err.Error())

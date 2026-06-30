@@ -24,3 +24,6 @@ vendor/
 /data
 /internal/logger/shortener.log
 /shortenertest_v2-darwin-arm64
+/shortener-darwin
+/shortener-linux
+/cmd/staticlint/multicheck

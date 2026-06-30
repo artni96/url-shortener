@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -26,8 +27,13 @@ import (
 )
 
 func run(cfg *config.Config) error {
+
 	ctx := context.Background()
 	appLogger, err := logger.InitLogger(cfg.DebugLevel)
+	if err != nil {
+		log.Fatalf("failed to initialize application logger: %v", err)
+		return err
+	}
 	auditChan := make(chan model.AuditEntity, 100)
 
 	app := &config.App{
@@ -131,10 +137,12 @@ func run(cfg *config.Config) error {
 	}()
 	select {
 	case <-gsCtx.Done():
-		if err = app.DB.Close(); err != nil {
-			app.Logger.Info("failed to close database", zap.Error(err))
-		} else if app.DB == nil {
-			app.Logger.Info("database connection closed gracefully ")
+		if app.DB != nil {
+			if err = app.DB.Close(); err != nil {
+				app.Logger.Info("failed to close database", zap.Error(err))
+			} else if app.DB == nil {
+				app.Logger.Info("database connection closed gracefully ")
+			}
 		}
 	}
 
@@ -144,5 +152,6 @@ func run(cfg *config.Config) error {
 		app.Logger.Info("server stopped gracefully")
 	}
 	app.Logger.Info("app stopped gracefully")
+
 	return nil
 }

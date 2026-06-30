@@ -14,6 +14,7 @@ import (
 )
 
 // AuditWriter is an object to write Audit data into the file.
+// generate:reset
 type AuditWriter struct {
 	file   *os.File
 	writer *bufio.Writer
