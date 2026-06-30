@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	httpSwagger "github.com/swaggo/http-swagger"
 	"go.uber.org/zap"
+	"golang.org/x/crypto/acme/autocert"
 
 	_ "github.com/artni96/url-shortener/api/docs"
 	"github.com/artni96/url-shortener/internal/config"
@@ -26,12 +28,14 @@ import (
 	"github.com/artni96/url-shortener/internal/service"
 )
 
+var ErrHTTPProdMode = errors.New("launching http server in prod mode is not allowed")
+
 func run(cfg *config.Config) error {
 
 	ctx := context.Background()
 	appLogger, err := logger.InitLogger(cfg.DebugLevel)
 	if err != nil {
-		log.Fatalf("failed to initialize application logger: %v", err)
+		log.Printf("failed to initialize application logger: %v\n", err)
 		return err
 	}
 	auditChan := make(chan model.AuditEntity, 100)
@@ -102,19 +106,58 @@ func run(cfg *config.Config) error {
 		zap.String("server address", app.Cfg.ServerAddress),
 	)
 
+	go audit.RunAudit(app)
+
 	newServer := &http.Server{
 		Addr:    app.Cfg.ServerAddress,
 		Handler: mainRouter,
 	}
 
-	go audit.RunAudit(app)
+	if app.Cfg.EnableHTTPS {
 
-	go func() {
-		err = newServer.ListenAndServe()
-		if err != nil {
-			app.Logger.Fatal("failed to start server", zap.Error(err))
+		if app.Cfg.Mode == "prod" {
+			manager := &autocert.Manager{
+				Cache:      autocert.DirCache("cache"),
+				Prompt:     autocert.AcceptTOS,
+				HostPolicy: autocert.HostWhitelist("test.com"),
+			}
+			newServer.TLSConfig = manager.TLSConfig()
+
+			go func() error {
+				app.Logger.Info("Starting HTTPS server in production mode", zap.String("server address", app.Cfg.ServerAddress))
+				err = newServer.ListenAndServeTLS("", "")
+				if err != nil {
+					app.Logger.Error("failed to start HTTPS server in production mode", zap.Error(err))
+					return err
+				}
+				return nil
+			}()
+		} else if app.Cfg.Mode == "dev" {
+			go func() error {
+				app.Logger.Info("Starting HTTPS server in development mode", zap.String("server address", app.Cfg.ServerAddress))
+				err = http.ListenAndServeTLS(app.Cfg.ServerAddress, "./certs/local/127.0.0.1+1.pem", "./certs/local/127.0.0.1+1-key.pem", mainRouter)
+				if err != nil {
+					app.Logger.Error("HTTPS server failed to start in development mode", zap.Error(err))
+					return err
+				}
+				return nil
+			}()
 		}
-	}()
+	} else {
+		if app.Cfg.Mode == "dev" {
+			go func() error {
+				err = newServer.ListenAndServe()
+				if err != nil {
+					app.Logger.Error("HTTP server failed to start in development mode", zap.Error(err))
+					return err
+				}
+				return nil
+			}()
+		} else {
+			app.Logger.Error(ErrHTTPProdMode.Error())
+			return ErrHTTPProdMode
+		}
+	}
 
 	shutdownChan := make(chan os.Signal, 1)
 	signal.Notify(shutdownChan, os.Interrupt)

@@ -23,6 +23,8 @@ type Config struct {
 	TokenExp        time.Duration `env:"TOKEN_EXPIRATION"`
 	AuditFile       string        `env:"AUDIT_FILE"`
 	AuditURL        string        `env:"AUDIT_URL"`
+	EnableHTTPS     bool          `env:"ENABLE_HTTPS"`
+	Mode            string        `env:"MODE"`
 }
 
 func ParseFlags() (*Config, error) {
@@ -36,6 +38,8 @@ func ParseFlags() (*Config, error) {
 	fs.StringVar(&conf.DatabaseDsn, "d", "", "database dsn")
 	fs.StringVar(&conf.AuditFile, "audit-file", "", "audit file path")
 	fs.StringVar(&conf.AuditURL, "audit-url", "", "audit url")
+	fs.BoolVar(&conf.EnableHTTPS, "s", false, "enable https")
+	fs.StringVar(&conf.Mode, "m", "dev", "launching mode")
 
 	err := fs.Parse(os.Args[1:])
 	if err != nil {
@@ -95,6 +99,11 @@ func ParseFlags() (*Config, error) {
 		}
 	} else {
 		conf.TokenExp = time.Minute * 1
+	}
+
+	envEnableHTTPS, ok := os.LookupEnv("ENABLE_HTTPS")
+	if ok {
+		conf.EnableHTTPS = envEnableHTTPS == "true"
 	}
 	return &conf, nil
 }
