@@ -102,10 +102,6 @@ func run(cfg *config.Config) error {
 		http.DefaultServeMux.ServeHTTP(w, r)
 	})
 
-	appLogger.Info("Starting server",
-		zap.String("server address", app.Cfg.ServerAddress),
-	)
-
 	go audit.RunAudit(app)
 
 	newServer := &http.Server{
@@ -146,6 +142,7 @@ func run(cfg *config.Config) error {
 	} else {
 		if app.Cfg.Mode == "dev" {
 			go func() error {
+				app.Logger.Info("Starting HTTP server in development mode", zap.String("server address", app.Cfg.ServerAddress))
 				err = newServer.ListenAndServe()
 				if err != nil {
 					app.Logger.Error("HTTP server failed to start in development mode", zap.Error(err))
