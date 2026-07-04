@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/artni96/url-shortener/internal/audit"
@@ -122,7 +123,7 @@ func run(cfg *config.Config) error {
 	}
 
 	go func() error {
-		err = runServer(app, mainRouter, newServer)
+		err = runServer(app, newServer)
 		if err != nil {
 			app.Logger.Error("failed to start server", zap.Error(err))
 			return err
@@ -131,7 +132,7 @@ func run(cfg *config.Config) error {
 	}()
 
 	shutdownChan := make(chan os.Signal, 1)
-	signal.Notify(shutdownChan, os.Interrupt)
+	signal.Notify(shutdownChan, os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGINT)
 	<-shutdownChan
 
 	gsPeriod := time.Second * 5
@@ -141,7 +142,12 @@ func run(cfg *config.Config) error {
 	close(shutdownChan)
 	close(auditChan)
 
-	app.Logger.Info("shutting app down", zap.Time("time", time.Now()))
+	app.Logger.Info("shutting the app down", zap.Time("time", time.Now()))
+	if err = newServer.Shutdown(gsCtx); err != nil {
+		app.Logger.Info("failed to shutdown server", zap.Error(err))
+	} else {
+		app.Logger.Info("server stopped gracefully, keep on processing left requests")
+	}
 	go func() {
 		deadline, _ := gsCtx.Deadline()
 		for i := deadline.Second() - time.Now().Second(); i > 0; i-- {
@@ -158,12 +164,6 @@ func run(cfg *config.Config) error {
 				app.Logger.Info("database connection closed gracefully ")
 			}
 		}
-	}
-
-	if err = newServer.Shutdown(gsCtx); err != nil {
-		app.Logger.Info("failed to shutdown server", zap.Error(err))
-	} else {
-		app.Logger.Info("server stopped gracefully")
 	}
 	app.Logger.Info("app stopped gracefully")
 
@@ -190,7 +190,7 @@ func stdoutConfig(cfg *config.Config) (string, error) {
 }
 
 // runServer launches the server according to the app config.
-func runServer(app *config.App, router *chi.Mux, server *http.Server) error {
+func runServer(app *config.App, server *http.Server) error {
 	outputConfig, err := stdoutConfig(app.Cfg)
 	if err != nil {
 		app.Logger.Error("failed to prepare output config data", zap.Error(err))
@@ -206,41 +206,35 @@ func runServer(app *config.App, router *chi.Mux, server *http.Server) error {
 			}
 			server.TLSConfig = manager.TLSConfig()
 
-			go func() error {
-				app.Logger.Info(outputConfig)
-				err = server.ListenAndServeTLS("", "")
-				if err != nil {
-					app.Logger.Error("failed to start HTTPS server in production mode", zap.Error(err))
-					return err
-				}
-				return nil
-			}()
+			app.Logger.Info(outputConfig)
+			err = server.ListenAndServeTLS("", "")
+			if err != nil && !errors.Is(err, http.ErrServerClosed) {
+				app.Logger.Error("failed to start HTTPS server in production mode", zap.Error(err))
+				return err
+			}
+			return nil
 		} else if app.Cfg.Mode == "dev" {
-			go func() error {
-				app.Logger.Info(outputConfig)
-				err = http.ListenAndServeTLS(app.Cfg.ServerAddress, "./certs/local/127.0.0.1+1.pem", "./certs/local/127.0.0.1+1-key.pem", router)
-				if err != nil {
-					app.Logger.Error("HTTPS server failed to start in development mode", zap.Error(err))
-					return err
-				}
-				return nil
-			}()
+
+			app.Logger.Info(outputConfig)
+			err = server.ListenAndServeTLS("./certs/local/127.0.0.1+1.pem", "./certs/local/127.0.0.1+1-key.pem")
+			if err != nil && !errors.Is(err, http.ErrServerClosed) {
+				app.Logger.Error("HTTPS server failed to start in development mode", zap.Error(err))
+				return err
+			}
+			return nil
 		}
 	} else {
 		if app.Cfg.Mode == "dev" {
-			go func() error {
-				app.Logger.Info(outputConfig)
-				err = server.ListenAndServe()
-				if err != nil {
-					app.Logger.Error("HTTP server failed to start in development mode", zap.Error(err))
-					return err
-				}
-				return nil
-			}()
-		} else {
-			app.Logger.Error(ErrHTTPProdMode.Error())
-			return ErrHTTPProdMode
+			app.Logger.Info(outputConfig)
+			err = server.ListenAndServe()
+			if err != nil && !errors.Is(err, http.ErrServerClosed) {
+				app.Logger.Error("HTTP server failed to start in development mode", zap.Error(err))
+				return err
+			}
+			return nil
 		}
+		app.Logger.Error(ErrHTTPProdMode.Error())
+		return ErrHTTPProdMode
 	}
 	return nil
 }
