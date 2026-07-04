@@ -12,13 +12,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/artni96/url-shortener/internal/audit"
-	"github.com/go-chi/chi/v5"
-	httpSwagger "github.com/swaggo/http-swagger"
-	"go.uber.org/zap"
-	"golang.org/x/crypto/acme/autocert"
-
 	_ "github.com/artni96/url-shortener/api/docs"
+	"github.com/artni96/url-shortener/internal/audit"
 	"github.com/artni96/url-shortener/internal/config"
 	"github.com/artni96/url-shortener/internal/config/db"
 	"github.com/artni96/url-shortener/internal/handler/healthcheck"
@@ -28,9 +23,11 @@ import (
 	urlrepo "github.com/artni96/url-shortener/internal/repository/urls"
 	authrepo "github.com/artni96/url-shortener/internal/repository/users"
 	"github.com/artni96/url-shortener/internal/service"
+	"github.com/go-chi/chi/v5"
+	httpSwagger "github.com/swaggo/http-swagger"
+	"go.uber.org/zap"
+	"golang.org/x/crypto/acme/autocert"
 )
-
-var ErrHTTPProdMode = errors.New("launching http server in prod mode is not allowed")
 
 type OutputConfig struct {
 	Mode            string
@@ -41,6 +38,7 @@ type OutputConfig struct {
 	AuditFile       string
 	AuditURL        string
 	DebugLevel      string
+	HostWhitelist   []string
 }
 
 func run(cfg *config.Config) error {
@@ -125,6 +123,7 @@ func run(cfg *config.Config) error {
 	go func() error {
 		err = runServer(app, newServer)
 		if err != nil {
+
 			app.Logger.Error("failed to start server", zap.Error(err))
 			return err
 		}
@@ -181,6 +180,7 @@ func stdoutConfig(cfg *config.Config) (string, error) {
 		AuditFile:       cfg.AuditFile,
 		AuditURL:        cfg.AuditURL,
 		DebugLevel:      cfg.DebugLevel,
+		HostWhitelist:   cfg.HostWhitelist,
 	}
 	data, err := json.MarshalIndent(outputConfig, "", "  ")
 	if err != nil {
@@ -202,39 +202,25 @@ func runServer(app *config.App, server *http.Server) error {
 			manager := &autocert.Manager{
 				Cache:      autocert.DirCache("cache"),
 				Prompt:     autocert.AcceptTOS,
-				HostPolicy: autocert.HostWhitelist("test.com"),
+				HostPolicy: autocert.HostWhitelist(app.Cfg.HostWhitelist...),
 			}
 			server.TLSConfig = manager.TLSConfig()
-
-			app.Logger.Info(outputConfig)
-			err = server.ListenAndServeTLS("", "")
-			if err != nil && !errors.Is(err, http.ErrServerClosed) {
-				app.Logger.Error("failed to start HTTPS server in production mode", zap.Error(err))
-				return err
-			}
-			return nil
-		} else if app.Cfg.Mode == "dev" {
-
-			app.Logger.Info(outputConfig)
-			err = server.ListenAndServeTLS("./certs/local/127.0.0.1+1.pem", "./certs/local/127.0.0.1+1-key.pem")
-			if err != nil && !errors.Is(err, http.ErrServerClosed) {
-				app.Logger.Error("HTTPS server failed to start in development mode", zap.Error(err))
-				return err
-			}
-			return nil
 		}
-	} else {
-		if app.Cfg.Mode == "dev" {
-			app.Logger.Info(outputConfig)
-			err = server.ListenAndServe()
-			if err != nil && !errors.Is(err, http.ErrServerClosed) {
-				app.Logger.Error("HTTP server failed to start in development mode", zap.Error(err))
-				return err
-			}
-			return nil
+
+		app.Logger.Info(outputConfig)
+		err = server.ListenAndServeTLS(app.Cfg.CertFile, app.Cfg.KeyFile)
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			app.Logger.Error("failed to start HTTPS server", zap.Error(err))
+			return err
 		}
-		app.Logger.Error(ErrHTTPProdMode.Error())
-		return ErrHTTPProdMode
+		return nil
+	}
+
+	app.Logger.Info(outputConfig)
+	err = server.ListenAndServe()
+	if err != nil && !errors.Is(err, http.ErrServerClosed) {
+		app.Logger.Error("failed to start HTTP server", zap.Error(err))
+		return err
 	}
 	return nil
 }

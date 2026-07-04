@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -33,12 +34,16 @@ type Config struct {
 	AuditFile       string        `env:"AUDIT_FILE"`
 	AuditURL        string        `env:"AUDIT_URL"`
 	EnableHTTPS     bool          `env:"ENABLE_HTTPS"`
+	CertFile        string        `env:"CERT_FILE"`
+	KeyFile         string        `env:"KEY_FILE"`
+	HostWhitelist   []string      `env:"HOST_WHITE_LIST"`
 	Mode            string        `env:"MODE"`
 }
 
 func ParseFlags() (*Config, error) {
 	fs := flag.NewFlagSet("fs", flag.ExitOnError)
 	var jsonFilePath string
+	var hostWhitelistStr string
 	conf := Config{}
 
 	fs.StringVar(&conf.ServerAddress, "a", "localhost:8080", "server address")
@@ -49,6 +54,9 @@ func ParseFlags() (*Config, error) {
 	fs.StringVar(&conf.AuditFile, "audit-file", "", "audit file path")
 	fs.StringVar(&conf.AuditURL, "audit-url", "", "audit url")
 	fs.BoolVar(&conf.EnableHTTPS, "s", false, "enable https")
+	fs.StringVar(&conf.CertFile, "cf", "", "cert file")
+	fs.StringVar(&conf.KeyFile, "kf", "", "key file")
+	fs.StringVar(&hostWhitelistStr, "hwl", "", "host whitelist")
 	fs.StringVar(&conf.Mode, "m", "dev", "launching mode")
 	fs.StringVar(&jsonFilePath, "c", "", "json config")
 
@@ -140,6 +148,24 @@ func ParseFlags() (*Config, error) {
 		conf.EnableHTTPS = envEnableHTTPS == "true"
 	} else if conf.EnableHTTPS == false && jsonConf != nil && jsonConf.EnableHTTPS {
 		conf.EnableHTTPS = true
+	}
+	envCertFile, ok := os.LookupEnv("CERT_FILE")
+	if ok {
+		conf.CertFile = envCertFile
+	} else {
+		conf.CertFile = "./certs/local/127.0.0.1+1.pem"
+	}
+	envKeyFile, ok := os.LookupEnv("KEY_FILE")
+	if ok {
+		conf.KeyFile = envKeyFile
+	} else {
+		conf.KeyFile = "./certs/local/127.0.0.1+1-key.pem"
+	}
+
+	conf.HostWhitelist = strings.Split(hostWhitelistStr, ",")
+	envHostWhitelist, ok := os.LookupEnv("HOST_WHITE_LIST")
+	if ok {
+		conf.HostWhitelist = strings.Split(envHostWhitelist, ",")
 	}
 	return &conf, nil
 }
