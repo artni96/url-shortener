@@ -2,12 +2,11 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"net/http"
-	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -27,23 +26,13 @@ import (
 	httpSwagger "github.com/swaggo/http-swagger"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/acme/autocert"
+	"golang.org/x/sync/errgroup"
 )
 
-type OutputConfig struct {
-	Mode            string
-	ServerAddress   string
-	BaseURL         string
-	FileStoragePath string
-	EnableHTTPS     bool
-	AuditFile       string
-	AuditURL        string
-	DebugLevel      string
-	HostWhitelist   []string
-}
-
+// run launches the app with all dependencies.
 func run(cfg *config.Config) error {
-
 	ctx := context.Background()
+	eg := new(errgroup.Group)
 	appLogger, err := logger.InitLogger(cfg.DebugLevel)
 	if err != nil {
 		log.Printf("failed to initialize application logger: %v\n", err)
@@ -112,57 +101,89 @@ func run(cfg *config.Config) error {
 	mainRouter.HandleFunc("/debug/pprof/*", func(w http.ResponseWriter, r *http.Request) {
 		http.DefaultServeMux.ServeHTTP(w, r)
 	})
-
-	go audit.RunAudit(app)
+	var errRunAudit error
+	eg.Go(func() error {
+		if errRunAudit = audit.RunAudit(app); errRunAudit != nil {
+			return err
+		}
+		return nil
+	})
 
 	newServer := &http.Server{
 		Addr:    app.Cfg.ServerAddress,
 		Handler: mainRouter,
 	}
-
-	go func() error {
-		err = runServer(app, newServer)
-		if err != nil {
-
-			app.Logger.Error("failed to start server", zap.Error(err))
+	var errRunServer error
+	eg.Go(func() error {
+		if errRunServer = runServer(app, newServer); errRunServer != nil {
 			return err
 		}
 		return nil
-	}()
+	})
 
-	shutdownChan := make(chan os.Signal, 1)
-	signal.Notify(shutdownChan, os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGINT)
-	<-shutdownChan
+	shutdownCtx, stop := signal.NotifyContext(ctx, syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGINT)
+	defer stop()
+	<-shutdownCtx.Done()
 
 	gsPeriod := time.Second * 5
 	gsCtx, gsCancel := context.WithTimeout(ctx, gsPeriod)
 	defer gsCancel()
 
-	close(shutdownChan)
 	close(auditChan)
 
 	app.Logger.Info("shutting the app down", zap.Time("time", time.Now()))
 	if err = newServer.Shutdown(gsCtx); err != nil {
-		app.Logger.Info("failed to shutdown server", zap.Error(err))
+		app.Logger.Info("failed to shutdown server gracefully", zap.Error(err))
 	} else {
+		gsCancel()
 		app.Logger.Info("server stopped gracefully, keep on processing left requests")
 	}
+
+	if err = eg.Wait(); err != nil {
+		app.Logger.Info("failed to wait for audit goroutines completion", zap.Error(err))
+	}
+
 	go func() {
+		ticker := time.NewTicker(1 * time.Second)
+		defer ticker.Stop()
 		deadline, _ := gsCtx.Deadline()
-		for i := deadline.Second() - time.Now().Second(); i > 0; i-- {
-			app.Logger.Info(fmt.Sprintf("app shutdown in %d sec", i))
-			time.Sleep(1 * time.Second)
-		}
-	}()
-	select {
-	case <-gsCtx.Done():
-		if app.DB != nil {
-			if err = app.DB.Close(); err != nil {
-				app.Logger.Info("failed to close database", zap.Error(err))
-			} else if app.DB == nil {
-				app.Logger.Info("database connection closed gracefully ")
+		for {
+			timeLeft := int(math.Ceil(time.Until(deadline).Seconds()))
+			if timeLeft > 0 {
+				<-ticker.C
+				app.Logger.Info(fmt.Sprintf("app shutdown in %d sec", timeLeft-1))
+
 			}
 		}
+	}()
+
+	var errDBConn error
+	eg.Go(func() error {
+		select {
+		case <-gsCtx.Done():
+			if app.DB != nil {
+				if errDBConn = app.DB.Close(); errDBConn != nil {
+					app.Logger.Info("failed to close database gracefully", zap.Error(errDBConn))
+					return errDBConn
+				}
+				app.Logger.Info("database connection closed gracefully ")
+				return nil
+			}
+		}
+		return nil
+	})
+
+	_ = eg.Wait()
+	if errRunServer != nil {
+		app.Logger.Info("failed to shutdown server gracefully", zap.Error(errRunServer))
+		return errRunServer
+	}
+	if errDBConn != nil {
+		app.Logger.Info("failed to close database gracefully", zap.Error(errDBConn))
+		return errDBConn
+	}
+	if errRunAudit != nil {
+		app.Logger.Info("failed to run audit entity", zap.Error(errRunAudit))
 	}
 	app.Logger.Info("app stopped gracefully")
 
@@ -171,22 +192,46 @@ func run(cfg *config.Config) error {
 
 // stdoutConfig provides stdout of the app config.
 func stdoutConfig(cfg *config.Config) (string, error) {
-	outputConfig := &OutputConfig{
-		Mode:            cfg.Mode,
-		ServerAddress:   cfg.ServerAddress,
-		BaseURL:         cfg.ResponseDomain,
-		FileStoragePath: cfg.FileStoragePath,
-		EnableHTTPS:     cfg.EnableHTTPS,
-		AuditFile:       cfg.AuditFile,
-		AuditURL:        cfg.AuditURL,
-		DebugLevel:      cfg.DebugLevel,
-		HostWhitelist:   cfg.HostWhitelist,
+	var resp string
+	resp += fmt.Sprintf("\n\nApp config: \n")
+	resp += fmt.Sprintf("	Mode: %s\n", cfg.Mode)
+	resp += fmt.Sprintf("	Server Address: %s\n", cfg.ServerAddress)
+	resp += fmt.Sprintf("	Base URL: %s\n", cfg.ResponseDomain)
+	if cfg.DatabaseDsn != "" {
+		resp += fmt.Sprintf("	Database is applied: %t\n", true)
+	} else {
+		resp += fmt.Sprintf("	Database is applied: %t\n", false)
 	}
-	data, err := json.MarshalIndent(outputConfig, "", "  ")
-	if err != nil {
-		return "", err
+	if cfg.FileStoragePath != "" {
+		resp += fmt.Sprintf("	Storage Path is applied: %t\n", true)
+	} else {
+		resp += fmt.Sprintf("	Storage Path is applied: %t\n", false)
 	}
-	return fmt.Sprintf("%s", data), nil
+	resp += fmt.Sprintf("	HTTPS is enable: %t\n", cfg.EnableHTTPS)
+	if cfg.AuditFile != "" {
+		resp += fmt.Sprintf("	Audit File is applied: %t\n", true)
+	} else {
+		resp += fmt.Sprintf("	Audit File is applied: %t\n", false)
+	}
+	if cfg.AuditURL != "" {
+		resp += fmt.Sprintf("	Audit URL is applied: %t\n", true)
+	} else {
+		resp += fmt.Sprintf("	Audit URL is applied: %t\n", false)
+	}
+	resp += fmt.Sprintf("	Debug Level: %s\n", cfg.DebugLevel)
+	if cfg.CertFile != "" {
+		resp += fmt.Sprintf("	Certificate is applied: %t\n", true)
+	} else {
+		resp += fmt.Sprintf("	Certificate is applied: %t\n", false)
+	}
+	if cfg.KeyFile != "" {
+		resp += fmt.Sprintf("	Key file is applied: %t\n", true)
+	} else {
+		resp += fmt.Sprintf("	Key file is applied: %t\n", false)
+	}
+	resp += fmt.Sprintf("	Host white list: %s", cfg.HostWhitelist)
+
+	return resp, nil
 }
 
 // runServer launches the server according to the app config.

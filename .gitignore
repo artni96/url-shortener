@@ -28,3 +28,4 @@ vendor/
 /shortener-linux
 /cmd/staticlint/multicheck
 .env
+/certs

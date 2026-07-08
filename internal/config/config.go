@@ -40,11 +40,13 @@ type Config struct {
 	Mode            string        `env:"MODE"`
 }
 
+// ParseFlags defines and applies incoming flags and environment variables to the app config.
 func ParseFlags() (*Config, error) {
 	fs := flag.NewFlagSet("fs", flag.ExitOnError)
 	var jsonFilePath string
 	var hostWhitelistStr string
 	conf := Config{}
+	definedFS := make(map[string]bool)
 
 	fs.StringVar(&conf.ServerAddress, "a", "localhost:8080", "server address")
 	fs.StringVar(&conf.ResponseDomain, "b", "http://localhost:8080", "response URL")
@@ -59,13 +61,18 @@ func ParseFlags() (*Config, error) {
 	fs.StringVar(&hostWhitelistStr, "hwl", "", "host whitelist")
 	fs.StringVar(&conf.Mode, "m", "dev", "launching mode")
 	fs.StringVar(&jsonFilePath, "c", "", "json config")
+	fs.StringVar(&jsonFilePath, "config", "", "json config")
 
 	err := fs.Parse(os.Args[1:])
 	if err != nil {
 		return nil, err
 	}
 
-	envJSONConfPath, ok := os.LookupEnv("JSON_CONFIG")
+	fs.Visit(func(f *flag.Flag) {
+		definedFS[f.Name] = true
+	})
+
+	envJSONConfPath, ok := os.LookupEnv("CONFIG")
 	if ok {
 		jsonFilePath = envJSONConfPath
 	}
@@ -83,14 +90,14 @@ func ParseFlags() (*Config, error) {
 	envServerAddress, ok := os.LookupEnv("SERVER_ADDRESS")
 	if ok {
 		conf.ServerAddress = envServerAddress
-	} else if conf.ServerAddress == "localhost:8080" && jsonConf != nil && jsonConf.ServerAddress != "" && conf.ServerAddress != jsonConf.ServerAddress {
+	} else if !definedFS["a"] && jsonConf != nil && jsonConf.ServerAddress != "" && conf.ServerAddress != jsonConf.ServerAddress {
 		conf.ServerAddress = jsonConf.ServerAddress
 	}
 
 	envBaseURL, ok := os.LookupEnv("BASE_URL")
 	if ok {
 		conf.ResponseDomain = envBaseURL
-	} else if conf.ResponseDomain == "http://localhost:8080" && jsonConf != nil && jsonConf.BaseURL != "" && conf.ResponseDomain != jsonConf.BaseURL {
+	} else if !definedFS["b"] && jsonConf != nil && jsonConf.BaseURL != "" && conf.ResponseDomain != jsonConf.BaseURL {
 		conf.ResponseDomain = jsonConf.BaseURL
 	}
 
@@ -109,7 +116,7 @@ func ParseFlags() (*Config, error) {
 	envDatabaseDsn, ok := os.LookupEnv("DATABASE_DSN")
 	if ok {
 		conf.DatabaseDsn = envDatabaseDsn
-	} else if conf.DatabaseDsn == "" && jsonConf != nil && jsonConf.DatabaseDSN != "" {
+	} else if !definedFS["f"] && jsonConf != nil && jsonConf.DatabaseDSN != "" {
 		conf.DatabaseDsn = jsonConf.DatabaseDSN
 	}
 
@@ -146,20 +153,16 @@ func ParseFlags() (*Config, error) {
 	envEnableHTTPS, ok := os.LookupEnv("ENABLE_HTTPS")
 	if ok {
 		conf.EnableHTTPS = envEnableHTTPS == "true"
-	} else if conf.EnableHTTPS == false && jsonConf != nil && jsonConf.EnableHTTPS {
+	} else if !definedFS["s"] && jsonConf != nil && jsonConf.EnableHTTPS {
 		conf.EnableHTTPS = true
 	}
 	envCertFile, ok := os.LookupEnv("CERT_FILE")
 	if ok {
 		conf.CertFile = envCertFile
-	} else {
-		conf.CertFile = "./certs/local/127.0.0.1+1.pem"
 	}
 	envKeyFile, ok := os.LookupEnv("KEY_FILE")
 	if ok {
 		conf.KeyFile = envKeyFile
-	} else {
-		conf.KeyFile = "./certs/local/127.0.0.1+1-key.pem"
 	}
 
 	conf.HostWhitelist = strings.Split(hostWhitelistStr, ",")
