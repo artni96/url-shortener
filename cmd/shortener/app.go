@@ -192,7 +192,7 @@ func run(cfg *config.Config) error {
 	})
 
 	if err = eg.Wait(); err != nil {
-		app.Logger.Info("failed to wait for child goroutines", zap.Error(err))
+		app.Logger.Info("failed to wait for errgroup goroutines completion", zap.Error(err))
 		return err
 	}
 
