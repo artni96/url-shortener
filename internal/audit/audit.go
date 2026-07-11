@@ -93,8 +93,11 @@ func RunAudit(app *config.App) error {
 			app.Logger.Error("failed to initialize file writer", zap.Error(err))
 			return err
 		}
+		defer fileWriter.Close()
 		fileSink = NewFileSink(app, fileWriter)
-		defer fileSink.Close()
+		if fileSink != nil {
+			defer fileSink.Close()
+		}
 		sinks = append(sinks, fileSink)
 	}
 
