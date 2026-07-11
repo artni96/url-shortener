@@ -39,6 +39,7 @@ func run(cfg *config.Config) error {
 		return err
 	}
 	auditChan := make(chan model.AuditEntity, 100)
+	isClosedChan := make(chan bool, 1)
 
 	app := &config.App{
 		DB:        nil,
@@ -101,9 +102,17 @@ func run(cfg *config.Config) error {
 	mainRouter.HandleFunc("/debug/pprof/*", func(w http.ResponseWriter, r *http.Request) {
 		http.DefaultServeMux.ServeHTTP(w, r)
 	})
+
+	shutdownCtx, stop := signal.NotifyContext(ctx, syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGINT)
+	defer stop()
+
 	var errRunAudit error
 	eg.Go(func() error {
-		if errRunAudit = audit.RunAudit(app); errRunAudit != nil {
+		if err = audit.RunAudit(app); err != nil {
+			if errRunAudit = shutdownCtx.Err(); errRunAudit != nil {
+				app.Logger.Error("a closing signal received, failed to maintain running audit service", zap.Error(err))
+				return errRunAudit
+			}
 			return err
 		}
 		return nil
@@ -115,78 +124,79 @@ func run(cfg *config.Config) error {
 	}
 	var errRunServer error
 	eg.Go(func() error {
-		if errRunServer = runServer(app, newServer); errRunServer != nil {
+		if err = runServer(app, newServer); err != nil {
+			if errRunServer = shutdownCtx.Err(); errRunServer != nil {
+				app.Logger.Info("a closing signal received, failed to maintain running server", zap.Error(err))
+				return errRunServer
+			}
 			return err
 		}
 		return nil
 	})
 
-	shutdownCtx, stop := signal.NotifyContext(ctx, syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGINT)
-	defer stop()
 	<-shutdownCtx.Done()
 
 	gsPeriod := time.Second * 5
 	gsCtx, gsCancel := context.WithTimeout(ctx, gsPeriod)
 	defer gsCancel()
 
-	close(auditChan)
-
 	app.Logger.Info("shutting the app down", zap.Time("time", time.Now()))
-	if err = newServer.Shutdown(gsCtx); err != nil {
-		app.Logger.Info("failed to shutdown server gracefully", zap.Error(err))
-	} else {
-		gsCancel()
-		app.Logger.Info("server stopped gracefully, keep on processing left requests")
-	}
 
-	if err = eg.Wait(); err != nil {
-		app.Logger.Info("failed to wait for audit goroutines completion", zap.Error(err))
-	}
-
-	go func() {
-		ticker := time.NewTicker(1 * time.Second)
-		defer ticker.Stop()
-		deadline, _ := gsCtx.Deadline()
-		for {
-			timeLeft := int(math.Ceil(time.Until(deadline).Seconds()))
-			if timeLeft > 0 {
-				<-ticker.C
-				app.Logger.Info(fmt.Sprintf("app shutdown in %d sec", timeLeft-1))
-
-			}
-		}
-	}()
-
-	var errDBConn error
 	eg.Go(func() error {
 		select {
 		case <-gsCtx.Done():
-			if app.DB != nil {
-				if errDBConn = app.DB.Close(); errDBConn != nil {
-					app.Logger.Info("failed to close database gracefully", zap.Error(errDBConn))
-					return errDBConn
+			if len(isClosedChan) == 0 {
+				app.Logger.Info("graceful period is out!")
+			}
+			fsCtx, fsCancel := context.WithTimeout(ctx, time.Second*30)
+			defer fsCancel()
+			ticker := time.NewTicker(1 * time.Second)
+			defer ticker.Stop()
+			deadline, _ := fsCtx.Deadline()
+			for {
+				timeLeft := int(math.Ceil(time.Until(deadline).Seconds()))
+				if timeLeft > 0 {
+					select {
+					case <-isClosedChan:
+						close(isClosedChan)
+						return nil
+					default:
+						<-ticker.C
+						app.Logger.Info(fmt.Sprintf("forceful app shutdown in %d sec", timeLeft-1))
+					}
+				} else if timeLeft == 0 {
+					app.Logger.Info(fmt.Sprintf("app stopped forcefully"))
+					return nil
 				}
-				app.Logger.Info("database connection closed gracefully ")
-				return nil
+			}
+		}
+	})
+
+	eg.Go(func() error {
+		if err = newServer.Shutdown(gsCtx); err != nil {
+			app.Logger.Info("failed to shutdown server gracefully", zap.Error(err))
+		} else {
+			close(auditChan)
+			app.Logger.Info("server stopped gracefully, keep on processing left requests")
+			if app.DB != nil {
+				if err = app.DB.Close(); err != nil {
+					app.Logger.Info("failed to close database gracefully", zap.Error(err))
+				} else {
+					isClosedChan <- true
+					gsCancel()
+					app.Logger.Info("database connection closed gracefully ")
+				}
 			}
 		}
 		return nil
 	})
 
-	_ = eg.Wait()
-	if errRunServer != nil {
-		app.Logger.Info("failed to shutdown server gracefully", zap.Error(errRunServer))
-		return errRunServer
+	if err = eg.Wait(); err != nil {
+		app.Logger.Info("failed to wait for child goroutines", zap.Error(err))
+		return err
 	}
-	if errDBConn != nil {
-		app.Logger.Info("failed to close database gracefully", zap.Error(errDBConn))
-		return errDBConn
-	}
-	if errRunAudit != nil {
-		app.Logger.Info("failed to run audit entity", zap.Error(errRunAudit))
-	}
-	app.Logger.Info("app stopped gracefully")
 
+	app.Logger.Info("app stopped gracefully")
 	return nil
 }
 
