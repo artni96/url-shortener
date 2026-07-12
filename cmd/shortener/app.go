@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"net/http"
 	"os"
 	"os/signal"
@@ -148,9 +149,13 @@ func run(cfg *config.Config) error {
 		case <-isClosedChan:
 			return nil
 		default:
-			app.Logger.Info("graceful period has expired, forceful period has begun", zap.Time("time", time.Now()))
+			app.Logger.Info("graceful period has expired", zap.Time("time", time.Now()))
+			app.Logger.Info("app will be shutdown forcefully in 30 seconds")
 			fsCtx, fsCancel := context.WithTimeout(ctx, time.Second*30)
 			defer fsCancel()
+
+			go fsCountdown(fsCtx, app, isClosedChan)
+
 			select {
 			case <-fsCtx.Done():
 				app.Logger.Info("app stopped forcefully", zap.Time("time", time.Now()))
@@ -270,4 +275,27 @@ func runServer(app *config.App, server *http.Server) error {
 		return err
 	}
 	return nil
+}
+
+// fsCountdown counts down left time of forceful shutdown.
+func fsCountdown(ctx context.Context, app *config.App, isClosedChan <-chan struct{}) {
+	deadline, _ := ctx.Deadline()
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-isClosedChan:
+			return
+		case <-ticker.C:
+			timeLeft := int(math.Ceil(time.Until(deadline).Seconds()))
+			if timeLeft == 0 {
+				return
+			}
+			if timeLeft == 15 || timeLeft == 10 || (timeLeft <= 5 && timeLeft > 0) {
+				app.Logger.Info(fmt.Sprintf("forceful app shutdown in %d sec", timeLeft))
+			}
+		}
+	}
 }
