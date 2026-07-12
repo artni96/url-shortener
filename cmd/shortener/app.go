@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"math"
 	"net/http"
+	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -39,7 +39,7 @@ func run(cfg *config.Config) error {
 		return err
 	}
 	auditChan := make(chan model.AuditEntity, 100)
-	isClosedChan := make(chan bool, 1)
+	isClosedChan := make(chan struct{})
 
 	app := &config.App{
 		DB:        nil,
@@ -143,50 +143,42 @@ func run(cfg *config.Config) error {
 	app.Logger.Info("shutting the app down", zap.Time("time", time.Now()))
 
 	eg.Go(func() error {
+		<-gsCtx.Done()
 		select {
-		case <-gsCtx.Done():
-			if len(isClosedChan) == 0 {
-				app.Logger.Info("graceful period is out!")
-			}
+		case <-isClosedChan:
+			return nil
+		default:
+			app.Logger.Info("graceful period has expired, forceful period has begun", zap.Time("time", time.Now()))
 			fsCtx, fsCancel := context.WithTimeout(ctx, time.Second*30)
 			defer fsCancel()
-			ticker := time.NewTicker(1 * time.Second)
-			defer ticker.Stop()
-			deadline, _ := fsCtx.Deadline()
-			for {
-				timeLeft := int(math.Ceil(time.Until(deadline).Seconds()))
-				if timeLeft > 0 {
-					select {
-					case <-isClosedChan:
-						close(isClosedChan)
-						return nil
-					default:
-						<-ticker.C
-						app.Logger.Info(fmt.Sprintf("forceful app shutdown in %d sec", timeLeft-1))
-					}
-				} else if timeLeft == 0 {
-					app.Logger.Info(fmt.Sprintf("app stopped forcefully"))
-					return nil
+			select {
+			case <-fsCtx.Done():
+				app.Logger.Info("app stopped forcefully", zap.Time("time", time.Now()))
+				os.Exit(0)
+			case _, ok := <-isClosedChan:
+				if !ok {
+					fsCancel()
 				}
 			}
 		}
+		return nil
 	})
 
 	eg.Go(func() error {
 		if err = newServer.Shutdown(gsCtx); err != nil {
 			app.Logger.Info("failed to shutdown server gracefully", zap.Error(err))
-		} else {
-			close(auditChan)
-			app.Logger.Info("server stopped gracefully, keep on processing left requests")
-			if app.DB != nil {
-				if err = app.DB.Close(); err != nil {
-					app.Logger.Info("failed to close database gracefully", zap.Error(err))
-				} else {
-					isClosedChan <- true
-					gsCancel()
-					app.Logger.Info("database connection closed gracefully ")
-				}
+			return err
+		}
+		close(auditChan)
+		app.Logger.Info("server stopped gracefully, keep on processing left requests")
+		if app.DB != nil {
+			if err = app.DB.Close(); err != nil {
+				app.Logger.Info("failed to close database gracefully", zap.Error(err))
+				return err
 			}
+			close(isClosedChan)
+			gsCancel()
+			app.Logger.Info("database connection closed gracefully")
 		}
 		return nil
 	})
