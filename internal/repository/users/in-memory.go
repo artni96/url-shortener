@@ -16,8 +16,12 @@ import (
 
 // InMemoryUserRepositoryInterface encapsulates the logic to handle User entities via in-memory storage.
 type InMemoryUserRepositoryInterface interface {
+	// Create saves a new User entity in the in-memory storage by user's IP.
 	Create(ip string) (model.User, error)
+	// GetByIP returns a User data from the in-memory storage by its ID.
 	GetByIP(ip string) (int, error)
+	// GetStats provides the number of unique users in the in-memory storage,
+	GetStats() int64
 
 	uploadInMemoryStorage(filepath string) error
 }
@@ -59,6 +63,11 @@ func (repo *InMemoryUserRepository) GetByIP(ip string) (int, error) {
 		}
 	}
 	return -1, fmt.Errorf("user not found for ip %s", ip)
+}
+
+// GetStats provides the number of unique users in the in-memory storage.
+func (repo *InMemoryUserRepository) GetStats() int64 {
+	return int64(len(repo.users))
 }
 
 // NewInMemoryUserRepository implements a new InMemoryUserRepository.

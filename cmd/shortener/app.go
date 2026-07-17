@@ -17,9 +17,11 @@ import (
 	"github.com/artni96/url-shortener/internal/config"
 	"github.com/artni96/url-shortener/internal/config/db"
 	"github.com/artni96/url-shortener/internal/handler/healthcheck"
+	statshandler "github.com/artni96/url-shortener/internal/handler/stats"
 	"github.com/artni96/url-shortener/internal/handler/urls"
 	"github.com/artni96/url-shortener/internal/logger"
 	"github.com/artni96/url-shortener/internal/model"
+	"github.com/artni96/url-shortener/internal/repository/stats"
 	urlrepo "github.com/artni96/url-shortener/internal/repository/urls"
 	authrepo "github.com/artni96/url-shortener/internal/repository/users"
 	"github.com/artni96/url-shortener/internal/service"
@@ -63,6 +65,9 @@ func run(cfg *config.Config) error {
 	var urlInMemoryRepository *urlrepo.InMemoryURLRepository
 	var urlService *service.URLService
 
+	var statsDBRepository *stats.DBStatsRepository
+	var statsService *service.StatsService
+
 	if DBCon != nil {
 		app.DB = DBCon
 		urlDBRepository, err = urlrepo.NewDBURLRepository(app)
@@ -78,6 +83,14 @@ func run(cfg *config.Config) error {
 			return fmt.Errorf("users db repository is not initialized: %w", err)
 		}
 		userService = service.NewUserService(userDBRepository, nil, app)
+
+		statsDBRepository, err = stats.NewDBStatsRepository(app)
+		if err != nil {
+			app.Logger.Error("failed to initialize stats db repository", zap.Error(err))
+			return fmt.Errorf("stats db repository is not initialized: %w", err)
+		}
+		statsService = service.NewStatsService(statsDBRepository, app, userService, urlService)
+
 		defer DBCon.Close()
 	} else {
 		urlInMemoryRepository, err = urlrepo.NewInMemoryURLRepository(app)
@@ -89,6 +102,8 @@ func run(cfg *config.Config) error {
 
 		userInMemoryRepository, err = authrepo.NewInMemoryUserRepository(app)
 		userService = service.NewUserService(nil, userInMemoryRepository, app)
+
+		statsService = service.NewStatsService(nil, app, userService, urlService)
 	}
 
 	mainRouter := chi.NewRouter()
@@ -96,9 +111,13 @@ func run(cfg *config.Config) error {
 	mainRouter.Get("/swagger/*", httpSwagger.WrapHandler)
 
 	urlRouter := urls.URLRouter(&ctx, app, urlService, userService, cfg)
-	healthRouter := healthcheck.HealthCheckRouter(&ctx, app)
 	mainRouter.Mount("/", urlRouter)
+
+	healthRouter := healthcheck.HealthCheckRouter(&ctx, app)
 	mainRouter.Mount("/ping", healthRouter)
+
+	statsRouter := statshandler.StatsRouter(ctx, app, statsService)
+	mainRouter.Mount("/api/internal", statsRouter)
 
 	mainRouter.HandleFunc("/debug/pprof/*", func(w http.ResponseWriter, r *http.Request) {
 		http.DefaultServeMux.ServeHTTP(w, r)
@@ -181,10 +200,10 @@ func run(cfg *config.Config) error {
 				app.Logger.Info("failed to close database gracefully", zap.Error(err))
 				return err
 			}
-			close(isClosedChan)
-			gsCancel()
-			app.Logger.Info("database connection closed gracefully")
 		}
+		close(isClosedChan)
+		gsCancel()
+		app.Logger.Info("database connection closed gracefully")
 		return nil
 	})
 

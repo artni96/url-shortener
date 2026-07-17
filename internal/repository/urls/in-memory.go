@@ -32,6 +32,8 @@ type InMemoryURLRepositoryInterface interface {
 	Delete(shortURL string) error
 	// BulkDelete removes several URL entities by one commit.
 	BulkDelete(urls []model.URLDelete) ([]error, error)
+	// GetStats provides the number of unique urls in the in-memory storage.
+	GetStats() int64
 
 	// IsURLListUnique checks whether the whole list of generated short URL values is unique.
 	IsURLListUnique(shortURLList []string) (bool, error)
@@ -212,8 +214,12 @@ func (repo *InMemoryURLRepository) BulkDelete(urls []model.URLDelete) ([]error, 
 			repo.urls[url.ShortURL] = urlData
 		}
 	}
-
 	return errs, nil
+}
+
+// GetStats provides the number of unique urls in the in-memory storage.
+func (repo *InMemoryURLRepository) GetStats() int64 {
+	return int64(len(repo.urls))
 }
 
 // IsURLListUnique checks whether the whole list of generated short URL values is unique.

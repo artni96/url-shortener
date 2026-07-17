@@ -101,6 +101,11 @@ func (s *UserService) GetByIP(ctx context.Context, ip string) (int, error) {
 	return userID, nil
 }
 
+// GetStats provides the number of unique users in the in-memory storage via the in-memory repository.
+func (s *UserService) GetStats() int64 {
+	return s.inMemoryRepository.GetStats()
+}
+
 // Claims provides claims for user jwt token.
 type Claims struct {
 	jwt.RegisteredClaims
