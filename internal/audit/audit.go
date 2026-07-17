@@ -46,7 +46,6 @@ func (w *AuditWriter) WriteAuditEntity(entity model.AuditEntity) error {
 	if err = w.writer.WriteByte('\n'); err != nil {
 		return fmt.Errorf("could not write to file: %w", err)
 	}
-	defer w.Close()
 	return w.writer.Flush()
 }
 
@@ -78,7 +77,7 @@ func (s *Semaphore) Release() {
 }
 
 // RunAudit sends Audit entities according to the cfg.
-func RunAudit(app *config.App) {
+func RunAudit(app *config.App) error {
 	var sinks []AuditSink
 
 	var wg sync.WaitGroup
@@ -92,9 +91,13 @@ func RunAudit(app *config.App) {
 		fileWriter, err = NewAuditWriter(app.Cfg.AuditFile)
 		if err != nil {
 			app.Logger.Error("failed to initialize file writer", zap.Error(err))
+			return err
 		}
+		defer fileWriter.Close()
 		fileSink = NewFileSink(app, fileWriter)
-		defer fileSink.Close()
+		if fileSink != nil {
+			defer fileSink.Close()
+		}
 		sinks = append(sinks, fileSink)
 	}
 
@@ -121,4 +124,5 @@ func RunAudit(app *config.App) {
 		}(obj)
 	}
 	wg.Wait()
+	return nil
 }

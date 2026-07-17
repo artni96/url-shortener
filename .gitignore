@@ -27,3 +27,5 @@ vendor/
 /shortener-darwin
 /shortener-linux
 /cmd/staticlint/multicheck
+.env
+/certs

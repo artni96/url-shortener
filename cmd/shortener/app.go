@@ -2,19 +2,18 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
+	"math"
 	"net/http"
 	"os"
 	"os/signal"
+	"syscall"
 	"time"
 
-	"github.com/artni96/url-shortener/internal/audit"
-	"github.com/go-chi/chi/v5"
-	httpSwagger "github.com/swaggo/http-swagger"
-	"go.uber.org/zap"
-
 	_ "github.com/artni96/url-shortener/api/docs"
+	"github.com/artni96/url-shortener/internal/audit"
 	"github.com/artni96/url-shortener/internal/config"
 	"github.com/artni96/url-shortener/internal/config/db"
 	"github.com/artni96/url-shortener/internal/handler/healthcheck"
@@ -24,17 +23,24 @@ import (
 	urlrepo "github.com/artni96/url-shortener/internal/repository/urls"
 	authrepo "github.com/artni96/url-shortener/internal/repository/users"
 	"github.com/artni96/url-shortener/internal/service"
+	"github.com/go-chi/chi/v5"
+	httpSwagger "github.com/swaggo/http-swagger"
+	"go.uber.org/zap"
+	"golang.org/x/crypto/acme/autocert"
+	"golang.org/x/sync/errgroup"
 )
 
+// run launches the app with all dependencies.
 func run(cfg *config.Config) error {
-
 	ctx := context.Background()
+	eg := new(errgroup.Group)
 	appLogger, err := logger.InitLogger(cfg.DebugLevel)
 	if err != nil {
-		log.Fatalf("failed to initialize application logger: %v", err)
+		log.Printf("failed to initialize application logger: %v\n", err)
 		return err
 	}
 	auditChan := make(chan model.AuditEntity, 100)
+	isClosedChan := make(chan struct{})
 
 	app := &config.App{
 		DB:        nil,
@@ -98,60 +104,198 @@ func run(cfg *config.Config) error {
 		http.DefaultServeMux.ServeHTTP(w, r)
 	})
 
-	appLogger.Info("Starting server",
-		zap.String("server address", app.Cfg.ServerAddress),
-	)
+	shutdownCtx, stop := signal.NotifyContext(ctx, syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGINT)
+	defer stop()
+
+	var errRunAudit error
+	eg.Go(func() error {
+		if err = audit.RunAudit(app); err != nil {
+			if errRunAudit = shutdownCtx.Err(); errRunAudit != nil {
+				app.Logger.Error("a closing signal received, failed to maintain running audit service", zap.Error(err))
+				return errRunAudit
+			}
+			return err
+		}
+		return nil
+	})
 
 	newServer := &http.Server{
 		Addr:    app.Cfg.ServerAddress,
 		Handler: mainRouter,
 	}
-
-	go audit.RunAudit(app)
-
-	go func() {
-		err = newServer.ListenAndServe()
-		if err != nil {
-			app.Logger.Fatal("failed to start server", zap.Error(err))
+	var errRunServer error
+	eg.Go(func() error {
+		if err = runServer(app, newServer); err != nil {
+			if errRunServer = shutdownCtx.Err(); errRunServer != nil {
+				app.Logger.Info("a closing signal received, failed to maintain running server", zap.Error(err))
+				return errRunServer
+			}
+			return err
 		}
-	}()
+		return nil
+	})
 
-	shutdownChan := make(chan os.Signal, 1)
-	signal.Notify(shutdownChan, os.Interrupt)
-	<-shutdownChan
+	<-shutdownCtx.Done()
 
 	gsPeriod := time.Second * 5
 	gsCtx, gsCancel := context.WithTimeout(ctx, gsPeriod)
 	defer gsCancel()
 
-	close(shutdownChan)
-	close(auditChan)
+	app.Logger.Info("shutting the app down", zap.Time("time", time.Now()))
 
-	app.Logger.Info("shutting app down", zap.Time("time", time.Now()))
-	go func() {
-		deadline, _ := gsCtx.Deadline()
-		for i := deadline.Second() - time.Now().Second(); i > 0; i-- {
-			app.Logger.Info(fmt.Sprintf("app shutdown in %d sec", i))
-			time.Sleep(1 * time.Second)
+	eg.Go(func() error {
+		<-gsCtx.Done()
+		select {
+		case <-isClosedChan:
+			return nil
+		default:
+			app.Logger.Info("graceful period has expired", zap.Time("time", time.Now()))
+			app.Logger.Info("app will be shutdown forcefully in 30 seconds")
+			fsCtx, fsCancel := context.WithTimeout(ctx, time.Second*30)
+			defer fsCancel()
+
+			go fsCountdown(fsCtx, app, isClosedChan)
+
+			select {
+			case <-fsCtx.Done():
+				app.Logger.Info("app stopped forcefully", zap.Time("time", time.Now()))
+				os.Exit(0)
+			case _, ok := <-isClosedChan:
+				if !ok {
+					fsCancel()
+				}
+			}
 		}
-	}()
-	select {
-	case <-gsCtx.Done():
+		return nil
+	})
+
+	eg.Go(func() error {
+		if err = newServer.Shutdown(gsCtx); err != nil {
+			app.Logger.Info("failed to shutdown server gracefully", zap.Error(err))
+			return err
+		}
+		close(auditChan)
+		app.Logger.Info("server stopped gracefully, keep on processing left requests")
 		if app.DB != nil {
 			if err = app.DB.Close(); err != nil {
-				app.Logger.Info("failed to close database", zap.Error(err))
-			} else if app.DB == nil {
-				app.Logger.Info("database connection closed gracefully ")
+				app.Logger.Info("failed to close database gracefully", zap.Error(err))
+				return err
+			}
+			close(isClosedChan)
+			gsCancel()
+			app.Logger.Info("database connection closed gracefully")
+		}
+		return nil
+	})
+
+	if err = eg.Wait(); err != nil {
+		app.Logger.Info("failed to wait for errgroup goroutines completion", zap.Error(err))
+		return err
+	}
+
+	app.Logger.Info("app stopped gracefully")
+	return nil
+}
+
+// stdoutConfig provides stdout of the app config.
+func stdoutConfig(cfg *config.Config) (string, error) {
+	var resp string
+	resp += fmt.Sprintf("\n\nApp config: \n")
+	resp += fmt.Sprintf("	Mode: %s\n", cfg.Mode)
+	resp += fmt.Sprintf("	Server Address: %s\n", cfg.ServerAddress)
+	resp += fmt.Sprintf("	Base URL: %s\n", cfg.ResponseDomain)
+	if cfg.DatabaseDsn != "" {
+		resp += fmt.Sprintf("	Database is applied: %t\n", true)
+	} else {
+		resp += fmt.Sprintf("	Database is applied: %t\n", false)
+	}
+	if cfg.FileStoragePath != "" {
+		resp += fmt.Sprintf("	Storage Path is applied: %t\n", true)
+	} else {
+		resp += fmt.Sprintf("	Storage Path is applied: %t\n", false)
+	}
+	resp += fmt.Sprintf("	HTTPS is enable: %t\n", cfg.EnableHTTPS)
+	if cfg.AuditFile != "" {
+		resp += fmt.Sprintf("	Audit File is applied: %t\n", true)
+	} else {
+		resp += fmt.Sprintf("	Audit File is applied: %t\n", false)
+	}
+	if cfg.AuditURL != "" {
+		resp += fmt.Sprintf("	Audit URL is applied: %t\n", true)
+	} else {
+		resp += fmt.Sprintf("	Audit URL is applied: %t\n", false)
+	}
+	resp += fmt.Sprintf("	Debug Level: %s\n", cfg.DebugLevel)
+	if cfg.CertFile != "" {
+		resp += fmt.Sprintf("	Certificate is applied: %t\n", true)
+	} else {
+		resp += fmt.Sprintf("	Certificate is applied: %t\n", false)
+	}
+	if cfg.KeyFile != "" {
+		resp += fmt.Sprintf("	Key file is applied: %t\n", true)
+	} else {
+		resp += fmt.Sprintf("	Key file is applied: %t\n", false)
+	}
+	resp += fmt.Sprintf("	Host white list: %s", cfg.HostWhitelist)
+
+	return resp, nil
+}
+
+// runServer launches the server according to the app config.
+func runServer(app *config.App, server *http.Server) error {
+	outputConfig, err := stdoutConfig(app.Cfg)
+	if err != nil {
+		app.Logger.Error("failed to prepare output config data", zap.Error(err))
+		return err
+	}
+
+	if app.Cfg.EnableHTTPS {
+		if app.Cfg.Mode == "prod" {
+			manager := &autocert.Manager{
+				Cache:      autocert.DirCache("cache"),
+				Prompt:     autocert.AcceptTOS,
+				HostPolicy: autocert.HostWhitelist(app.Cfg.HostWhitelist...),
+			}
+			server.TLSConfig = manager.TLSConfig()
+		}
+
+		app.Logger.Info(outputConfig)
+		err = server.ListenAndServeTLS(app.Cfg.CertFile, app.Cfg.KeyFile)
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			app.Logger.Error("failed to start HTTPS server", zap.Error(err))
+			return err
+		}
+		return nil
+	}
+
+	app.Logger.Info(outputConfig)
+	err = server.ListenAndServe()
+	if err != nil && !errors.Is(err, http.ErrServerClosed) {
+		app.Logger.Error("failed to start HTTP server", zap.Error(err))
+		return err
+	}
+	return nil
+}
+
+// fsCountdown counts down left time of forceful shutdown.
+func fsCountdown(ctx context.Context, app *config.App, isClosedChan <-chan struct{}) {
+	deadline, _ := ctx.Deadline()
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-isClosedChan:
+			return
+		case <-ticker.C:
+			timeLeft := int(math.Ceil(time.Until(deadline).Seconds()))
+			if timeLeft == 0 {
+				return
+			}
+			if timeLeft == 15 || timeLeft == 10 || (timeLeft <= 5 && timeLeft > 0) {
+				app.Logger.Info(fmt.Sprintf("forceful app shutdown in %d sec", timeLeft))
 			}
 		}
 	}
-
-	if err = newServer.Shutdown(gsCtx); err != nil {
-		app.Logger.Info("failed to shutdown server", zap.Error(err))
-	} else {
-		app.Logger.Info("server stopped gracefully")
-	}
-	app.Logger.Info("app stopped gracefully")
-
-	return nil
 }

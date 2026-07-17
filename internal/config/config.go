@@ -1,9 +1,11 @@
 package config
 
 import (
+	"encoding/json"
 	"errors"
 	"flag"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -12,6 +14,14 @@ import (
 
 	"github.com/artni96/url-shortener/internal/model"
 )
+
+type jsonConfig struct {
+	ServerAddress   string `json:"server_address"`
+	BaseURL         string `json:"base_url"`
+	FileStoragePath string `json:"file_storage_path"`
+	DatabaseDSN     string `json:"database_dsn"`
+	EnableHTTPS     bool   `json:"enable_https"`
+}
 
 type Config struct {
 	ServerAddress   string        `env:"SERVER_ADDRESS"`
@@ -23,11 +33,20 @@ type Config struct {
 	TokenExp        time.Duration `env:"TOKEN_EXPIRATION"`
 	AuditFile       string        `env:"AUDIT_FILE"`
 	AuditURL        string        `env:"AUDIT_URL"`
+	EnableHTTPS     bool          `env:"ENABLE_HTTPS"`
+	CertFile        string        `env:"CERT_FILE"`
+	KeyFile         string        `env:"KEY_FILE"`
+	HostWhitelist   []string      `env:"HOST_WHITE_LIST"`
+	Mode            string        `env:"MODE"`
 }
 
+// ParseFlags defines and applies incoming flags and environment variables to the app config.
 func ParseFlags() (*Config, error) {
 	fs := flag.NewFlagSet("fs", flag.ExitOnError)
+	var jsonFilePath string
+	var hostWhitelistStr string
 	conf := Config{}
+	definedFS := make(map[string]bool)
 
 	fs.StringVar(&conf.ServerAddress, "a", "localhost:8080", "server address")
 	fs.StringVar(&conf.ResponseDomain, "b", "http://localhost:8080", "response URL")
@@ -36,20 +55,50 @@ func ParseFlags() (*Config, error) {
 	fs.StringVar(&conf.DatabaseDsn, "d", "", "database dsn")
 	fs.StringVar(&conf.AuditFile, "audit-file", "", "audit file path")
 	fs.StringVar(&conf.AuditURL, "audit-url", "", "audit url")
+	fs.BoolVar(&conf.EnableHTTPS, "s", false, "enable https")
+	fs.StringVar(&conf.CertFile, "cf", "", "cert file")
+	fs.StringVar(&conf.KeyFile, "kf", "", "key file")
+	fs.StringVar(&hostWhitelistStr, "hwl", "", "host whitelist")
+	fs.StringVar(&conf.Mode, "m", "dev", "launching mode")
+	fs.StringVar(&jsonFilePath, "c", "", "json config")
+	fs.StringVar(&jsonFilePath, "config", "", "json config")
 
 	err := fs.Parse(os.Args[1:])
 	if err != nil {
 		return nil, err
 	}
 
+	fs.Visit(func(f *flag.Flag) {
+		definedFS[f.Name] = true
+	})
+
+	envJSONConfPath, ok := os.LookupEnv("CONFIG")
+	if ok {
+		jsonFilePath = envJSONConfPath
+	}
+
+	var jsonConf *jsonConfig
+
+	if jsonFilePath != "" {
+		jsonConf, err = readJSONConfig(jsonFilePath)
+		if err != nil {
+			return nil, err
+		}
+
+	}
+
 	envServerAddress, ok := os.LookupEnv("SERVER_ADDRESS")
 	if ok {
 		conf.ServerAddress = envServerAddress
+	} else if !definedFS["a"] && jsonConf != nil && jsonConf.ServerAddress != "" && conf.ServerAddress != jsonConf.ServerAddress {
+		conf.ServerAddress = jsonConf.ServerAddress
 	}
 
 	envBaseURL, ok := os.LookupEnv("BASE_URL")
 	if ok {
 		conf.ResponseDomain = envBaseURL
+	} else if !definedFS["b"] && jsonConf != nil && jsonConf.BaseURL != "" && conf.ResponseDomain != jsonConf.BaseURL {
+		conf.ResponseDomain = jsonConf.BaseURL
 	}
 
 	envDebugLevel, ok := os.LookupEnv("DEBUG_LEVEL")
@@ -60,11 +109,15 @@ func ParseFlags() (*Config, error) {
 	envFileStorePath, ok := os.LookupEnv("FILE_STORAGE_PATH")
 	if ok {
 		conf.FileStoragePath = envFileStorePath
+	} else if conf.FileStoragePath == "" && jsonConf != nil && jsonConf.FileStoragePath != "" {
+		conf.FileStoragePath = jsonConf.FileStoragePath
 	}
 
 	envDatabaseDsn, ok := os.LookupEnv("DATABASE_DSN")
 	if ok {
 		conf.DatabaseDsn = envDatabaseDsn
+	} else if !definedFS["f"] && jsonConf != nil && jsonConf.DatabaseDSN != "" {
+		conf.DatabaseDsn = jsonConf.DatabaseDSN
 	}
 
 	envAuditFile, ok := os.LookupEnv("AUDIT_FILE")
@@ -96,6 +149,27 @@ func ParseFlags() (*Config, error) {
 	} else {
 		conf.TokenExp = time.Minute * 1
 	}
+
+	envEnableHTTPS, ok := os.LookupEnv("ENABLE_HTTPS")
+	if ok {
+		conf.EnableHTTPS = envEnableHTTPS == "true"
+	} else if !definedFS["s"] && jsonConf != nil && jsonConf.EnableHTTPS {
+		conf.EnableHTTPS = true
+	}
+	envCertFile, ok := os.LookupEnv("CERT_FILE")
+	if ok {
+		conf.CertFile = envCertFile
+	}
+	envKeyFile, ok := os.LookupEnv("KEY_FILE")
+	if ok {
+		conf.KeyFile = envKeyFile
+	}
+
+	conf.HostWhitelist = strings.Split(hostWhitelistStr, ",")
+	envHostWhitelist, ok := os.LookupEnv("HOST_WHITE_LIST")
+	if ok {
+		conf.HostWhitelist = strings.Split(envHostWhitelist, ",")
+	}
 	return &conf, nil
 }
 
@@ -105,4 +179,18 @@ type App struct {
 	Cfg       *Config
 	Logger    *zap.Logger
 	AuditChan chan model.AuditEntity
+}
+
+// readJSONConfig read config settings from a JSON file.
+func readJSONConfig(path string) (*jsonConfig, error) {
+	conf := &jsonConfig{}
+	file, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	err = json.Unmarshal(file, &conf)
+	if err != nil {
+		return nil, err
+	}
+	return conf, nil
 }
