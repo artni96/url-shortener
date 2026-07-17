@@ -21,6 +21,7 @@ type jsonConfig struct {
 	FileStoragePath string `json:"file_storage_path"`
 	DatabaseDSN     string `json:"database_dsn"`
 	EnableHTTPS     bool   `json:"enable_https"`
+	TrustedSubnet   string `json:"trusted_subnet"`
 }
 
 type Config struct {
@@ -38,6 +39,7 @@ type Config struct {
 	KeyFile         string        `env:"KEY_FILE"`
 	HostWhitelist   []string      `env:"HOST_WHITE_LIST"`
 	Mode            string        `env:"MODE"`
+	TrustedSubnet   string        `env:"TRUSTED_SUBNET"`
 }
 
 // ParseFlags defines and applies incoming flags and environment variables to the app config.
@@ -62,6 +64,7 @@ func ParseFlags() (*Config, error) {
 	fs.StringVar(&conf.Mode, "m", "dev", "launching mode")
 	fs.StringVar(&jsonFilePath, "c", "", "json config")
 	fs.StringVar(&jsonFilePath, "config", "", "json config")
+	fs.StringVar(&conf.TrustedSubnet, "t", "", "trusted subnet")
 
 	err := fs.Parse(os.Args[1:])
 	if err != nil {
@@ -170,6 +173,12 @@ func ParseFlags() (*Config, error) {
 	if ok {
 		conf.HostWhitelist = strings.Split(envHostWhitelist, ",")
 	}
+
+	envTrustedSubnet, ok := os.LookupEnv("TRUSTED_SUBNET")
+	if ok {
+		conf.TrustedSubnet = envTrustedSubnet
+	}
+
 	return &conf, nil
 }
 

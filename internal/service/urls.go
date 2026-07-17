@@ -35,6 +35,8 @@ type URLServiceInterface interface {
 	Delete(ctx context.Context, urlID string) error
 	// BulkDelete removes several URL entities by one commit.
 	BulkDelete(ctx context.Context, urls []model.URLDelete) error
+	// GetStats provides the number of unique urls in the in-memory storage via the in-memory repository.
+	GetStats() int64
 }
 
 // URLService implements the interaction with URL data through DB or/else a file.
@@ -343,6 +345,11 @@ func (s *URLService) BulkDelete(ctx context.Context, urls []model.URLDelete) err
 		return err
 	}
 	return nil
+}
+
+// GetStats provides the number of unique urls in the in-memory storage via the in-memory repository.
+func (s *URLService) GetStats() int64 {
+	return s.inMemoryRepository.GetStats()
 }
 
 // BulkFileUpdate updates the file with new data (users and urls).

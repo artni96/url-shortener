@@ -114,7 +114,7 @@ func (repo *DBURLRepository) BulkCreate(ctx context.Context, urls []model.URLBul
 		}
 		return nil, fmt.Errorf("failed to bulk create: %w", err)
 	}
-	if err := tx.Commit(); err != nil {
+	if err = tx.Commit(); err != nil {
 		return nil, fmt.Errorf("failed to commit bulk create: %w", err)
 	}
 	return result, nil
