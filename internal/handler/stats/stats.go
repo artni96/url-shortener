@@ -41,10 +41,11 @@ func (s *StatsHandler) GetStatsHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(response)
 }
 
-func StatsRouter(ctx context.Context, app *config.App, service service.StatsServiceInterface) chi.Router {
+func StatsRouter(ctx context.Context, app *config.App, service service.StatsServiceInterface, trustedSubnet string) chi.Router {
 	r := chi.NewRouter()
 
 	r.Use(middlewares.PanicRecoverer(app.Logger))
+	r.Use(middlewares.CheckIP(app.Logger, trustedSubnet))
 	r.Use(middleware.RealIP)
 	r.Use(logger2.RequestLoggerMiddleware(app.Logger))
 	r.Use(config.GzipMiddleware)

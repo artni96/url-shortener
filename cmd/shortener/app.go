@@ -116,7 +116,7 @@ func run(cfg *config.Config) error {
 	healthRouter := healthcheck.HealthCheckRouter(&ctx, app)
 	mainRouter.Mount("/ping", healthRouter)
 
-	statsRouter := statshandler.StatsRouter(ctx, app, statsService)
+	statsRouter := statshandler.StatsRouter(ctx, app, statsService, cfg.TrustedSubnet)
 	mainRouter.Mount("/api/internal", statsRouter)
 
 	mainRouter.HandleFunc("/debug/pprof/*", func(w http.ResponseWriter, r *http.Request) {
