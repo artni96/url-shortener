@@ -7,7 +7,7 @@ import (
 	"net/http"
 
 	"github.com/artni96/url-shortener/internal/config"
-	"github.com/artni96/url-shortener/internal/handler/middlewares"
+	middlewares2 "github.com/artni96/url-shortener/internal/handler/http/middlewares"
 	logger2 "github.com/artni96/url-shortener/internal/logger"
 	"github.com/artni96/url-shortener/internal/service"
 	"github.com/go-chi/chi/v5"
@@ -44,8 +44,8 @@ func (s *StatsHandler) GetStatsHandler(w http.ResponseWriter, r *http.Request) {
 func StatsRouter(ctx context.Context, app *config.App, service service.StatsServiceInterface, trustedSubnet string) chi.Router {
 	r := chi.NewRouter()
 
-	r.Use(middlewares.PanicRecoverer(app.Logger))
-	r.Use(middlewares.CheckIP(app.Logger, trustedSubnet))
+	r.Use(middlewares2.PanicRecoverer(app.Logger))
+	r.Use(middlewares2.CheckIP(app.Logger, trustedSubnet))
 	r.Use(middleware.RealIP)
 	r.Use(logger2.RequestLoggerMiddleware(app.Logger))
 	r.Use(config.GzipMiddleware)

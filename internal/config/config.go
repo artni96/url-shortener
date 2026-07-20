@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"flag"
+	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -40,6 +41,7 @@ type Config struct {
 	HostWhitelist   []string      `env:"HOST_WHITE_LIST"`
 	Mode            string        `env:"MODE"`
 	TrustedSubnet   string        `env:"TRUSTED_SUBNET"`
+	GRPCAddress     string        `env:"GRPC_PORT"`
 }
 
 // ParseFlags defines and applies incoming flags and environment variables to the app config.
@@ -66,6 +68,9 @@ func ParseFlags() (*Config, error) {
 	fs.StringVar(&jsonFilePath, "config", "", "json config")
 	fs.StringVar(&conf.TrustedSubnet, "t", "", "trusted subnet")
 
+	var grpcPort string
+	fs.StringVar(&grpcPort, "g", "3200", "grps port")
+
 	err := fs.Parse(os.Args[1:])
 	if err != nil {
 		return nil, err
@@ -87,7 +92,6 @@ func ParseFlags() (*Config, error) {
 		if err != nil {
 			return nil, err
 		}
-
 	}
 
 	envServerAddress, ok := os.LookupEnv("SERVER_ADDRESS")
@@ -96,6 +100,14 @@ func ParseFlags() (*Config, error) {
 	} else if !definedFS["a"] && jsonConf != nil && jsonConf.ServerAddress != "" && conf.ServerAddress != jsonConf.ServerAddress {
 		conf.ServerAddress = jsonConf.ServerAddress
 	}
+
+	envGRPCPort, ok := os.LookupEnv("GRPC_PORT")
+	if ok {
+		grpcPort = envGRPCPort
+	}
+
+	httpHost := strings.Split(conf.ServerAddress, ":")[0]
+	conf.GRPCAddress = fmt.Sprintf("%s:%s", httpHost, grpcPort)
 
 	envBaseURL, ok := os.LookupEnv("BASE_URL")
 	if ok {

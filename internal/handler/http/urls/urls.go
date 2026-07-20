@@ -13,13 +13,13 @@ import (
 	"sync"
 	"time"
 
+	http2 "github.com/artni96/url-shortener/internal/handler/http"
+	"github.com/artni96/url-shortener/internal/handler/http/middlewares"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"go.uber.org/zap"
 
 	"github.com/artni96/url-shortener/internal/config"
-	"github.com/artni96/url-shortener/internal/handler"
-	"github.com/artni96/url-shortener/internal/handler/middlewares"
 	"github.com/artni96/url-shortener/internal/logger"
 	"github.com/artni96/url-shortener/internal/model"
 	"github.com/artni96/url-shortener/internal/repository/urls"
@@ -65,7 +65,7 @@ func NewURLHandler(ctx *context.Context, app *config.App, urlService service.URL
 func (h *URLHandler) ShortenURLHandler(w http.ResponseWriter, r *http.Request) {
 	userID, err := getOrCreateUserID(h, w, r)
 	if err != nil {
-		handler.ErrorResponse(w, "internal server error", http.StatusInternalServerError, h.logger)
+		http2.ErrorResponse(w, "internal server error", http.StatusInternalServerError, h.logger)
 		return
 	}
 
@@ -77,18 +77,18 @@ func (h *URLHandler) ShortenURLHandler(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	if err != nil {
-		handler.ErrorResponse(w, "invalid request - empty body", http.StatusBadRequest, h.logger)
+		http2.ErrorResponse(w, "invalid request - empty body", http.StatusBadRequest, h.logger)
 		return
 	}
 
 	if err = json.Unmarshal(buf.Bytes(), &body); err != nil {
-		handler.ErrorResponse(w, "could not unmarshal request body", http.StatusBadRequest, h.logger)
+		http2.ErrorResponse(w, "could not unmarshal request body", http.StatusBadRequest, h.logger)
 		return
 	}
 	body.CreatedBy = userID
 
 	if !isURLCorrect(body.OriginalURL) {
-		handler.ErrorResponse(w, fmt.Sprintf("url '%s' is invalid", body.OriginalURL), http.StatusBadRequest, h.logger)
+		http2.ErrorResponse(w, fmt.Sprintf("url '%s' is invalid", body.OriginalURL), http.StatusBadRequest, h.logger)
 		return
 	}
 
@@ -109,19 +109,19 @@ func (h *URLHandler) ShortenURLHandler(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		if errors.Is(err, service.ErrFailedToCreated) {
-			handler.ErrorResponse(w, err.Error(), http.StatusInternalServerError, h.logger)
+			http2.ErrorResponse(w, err.Error(), http.StatusInternalServerError, h.logger)
 			return
 		} else if errors.Is(err, urls.ErrOriginalURLAlreadyExists) {
 			w.WriteHeader(http.StatusConflict)
 			resp, marshalErr := json.Marshal(responseData)
 			if marshalErr != nil {
-				handler.ErrorResponse(w, fmt.Sprintf("Could not create short URL for %s", body.OriginalURL), http.StatusInternalServerError, h.logger)
+				http2.ErrorResponse(w, fmt.Sprintf("Could not create short URL for %s", body.OriginalURL), http.StatusInternalServerError, h.logger)
 				return
 			}
 			w.Write(resp)
 			return
 		}
-		handler.ErrorResponse(w, fmt.Sprintf("Could not create short URL for %s", body.OriginalURL), http.StatusInternalServerError, h.logger)
+		http2.ErrorResponse(w, fmt.Sprintf("Could not create short URL for %s", body.OriginalURL), http.StatusInternalServerError, h.logger)
 		return
 
 	}
@@ -129,7 +129,7 @@ func (h *URLHandler) ShortenURLHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 	resp, err := json.Marshal(responseData)
 	if err != nil {
-		handler.ErrorResponse(w, fmt.Sprintf("Could not create short URL for %s", body.OriginalURL), http.StatusInternalServerError, h.logger)
+		http2.ErrorResponse(w, fmt.Sprintf("Could not create short URL for %s", body.OriginalURL), http.StatusInternalServerError, h.logger)
 		return
 	}
 	w.Write(resp)
@@ -150,7 +150,7 @@ func (h *URLHandler) ShortenURLHandler(w http.ResponseWriter, r *http.Request) {
 func (h *URLHandler) BulkCreateURLHandler(w http.ResponseWriter, r *http.Request) {
 	userID, err := getOrCreateUserID(h, w, r)
 	if err != nil {
-		handler.ErrorResponse(w, "internal server error", http.StatusInternalServerError, h.logger)
+		http2.ErrorResponse(w, "internal server error", http.StatusInternalServerError, h.logger)
 		return
 	}
 
@@ -161,19 +161,19 @@ func (h *URLHandler) BulkCreateURLHandler(w http.ResponseWriter, r *http.Request
 	defer r.Body.Close()
 
 	if err != nil {
-		handler.ErrorResponse(w, "invalid request - empty body", http.StatusBadRequest, h.logger)
+		http2.ErrorResponse(w, "invalid request - empty body", http.StatusBadRequest, h.logger)
 		return
 	}
 
 	if err = json.Unmarshal(buf.Bytes(), &body); err != nil {
-		handler.ErrorResponse(w, "could not unmarshal request body", http.StatusBadRequest, h.logger)
+		http2.ErrorResponse(w, "could not unmarshal request body", http.StatusBadRequest, h.logger)
 		return
 	}
 
 	// валидация входных данных
 	for i, url := range body {
 		if url.OriginalURL == "" || url.CorrelationID == "" {
-			handler.ErrorResponse(w, "invalid body request", http.StatusBadRequest, h.logger)
+			http2.ErrorResponse(w, "invalid body request", http.StatusBadRequest, h.logger)
 			return
 		}
 		body[i].CreatedBy = userID
@@ -182,20 +182,20 @@ func (h *URLHandler) BulkCreateURLHandler(w http.ResponseWriter, r *http.Request
 	responseData, err := h.urlService.BulkCreate(*h.ctx, body, h.responseDomain)
 	if err != nil {
 		if errors.Is(err, urls.ErrShortURLAlreadyExists) {
-			handler.ErrorResponse(w, err.Error(), http.StatusBadRequest, h.logger)
+			http2.ErrorResponse(w, err.Error(), http.StatusBadRequest, h.logger)
 			return
 		} else if errors.Is(err, urls.ErrDuplicatedURL) {
-			handler.ErrorResponse(w, err.Error(), http.StatusConflict, h.logger)
+			http2.ErrorResponse(w, err.Error(), http.StatusConflict, h.logger)
 			return
 		}
-		handler.ErrorResponse(w, "could not bulk create short URL", http.StatusInternalServerError, h.logger)
+		http2.ErrorResponse(w, "could not bulk create short URL", http.StatusInternalServerError, h.logger)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	resp, err := json.Marshal(responseData)
 	if err != nil {
-		handler.ErrorResponse(w, "could not marshal request body", http.StatusInternalServerError, h.logger)
+		http2.ErrorResponse(w, "could not marshal request body", http.StatusInternalServerError, h.logger)
 		return
 	}
 	w.Write(resp)
@@ -339,7 +339,7 @@ func (h *URLHandler) GetListHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	resp, err := json.Marshal(urlList)
 	if err != nil {
-		handler.ErrorResponse(w, "could not marshal request body", http.StatusInternalServerError, h.logger)
+		http2.ErrorResponse(w, "could not marshal request body", http.StatusInternalServerError, h.logger)
 		return
 	}
 	w.Write(resp)
@@ -382,7 +382,7 @@ func (h *URLHandler) GetUserListHandler(w http.ResponseWriter, r *http.Request) 
 		w.WriteHeader(http.StatusOK)
 		resp, err := json.Marshal(urlList)
 		if err != nil {
-			handler.ErrorResponse(w, "could not marshal request body", http.StatusInternalServerError, h.logger)
+			http2.ErrorResponse(w, "could not marshal request body", http.StatusInternalServerError, h.logger)
 			return
 		}
 		w.Write(resp)
@@ -412,12 +412,12 @@ func (h *URLHandler) UpdateURLHandler(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	if err != nil {
-		handler.ErrorResponse(w, "invalid request - empty body", http.StatusBadRequest, h.logger)
+		http2.ErrorResponse(w, "invalid request - empty body", http.StatusBadRequest, h.logger)
 		return
 	}
 
 	if err = json.Unmarshal(buf.Bytes(), &body); err != nil {
-		handler.ErrorResponse(w, "could not unmarshal request body", http.StatusBadRequest, h.logger)
+		http2.ErrorResponse(w, "could not unmarshal request body", http.StatusBadRequest, h.logger)
 		return
 	}
 
@@ -429,7 +429,7 @@ func (h *URLHandler) UpdateURLHandler(w http.ResponseWriter, r *http.Request) {
 	updatedEntity, err := h.urlService.Update(*h.ctx, entityToUpdate)
 	if err != nil {
 		if errors.Is(err, urls.ErrURLNotFound) {
-			handler.ErrorResponse(w, err.Error(), http.StatusBadRequest, h.logger)
+			http2.ErrorResponse(w, err.Error(), http.StatusBadRequest, h.logger)
 			return
 		} else if errors.Is(err, urls.ErrOriginalURLAlreadyExists) {
 			responseData := model.URLCreateResponse{
@@ -438,7 +438,7 @@ func (h *URLHandler) UpdateURLHandler(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusConflict)
 			resp, marshalErr := json.Marshal(responseData)
 			if marshalErr != nil {
-				handler.ErrorResponse(w, fmt.Sprintf("Could not create short URL for %s", body.OriginalURL), http.StatusInternalServerError, h.logger)
+				http2.ErrorResponse(w, fmt.Sprintf("Could not create short URL for %s", body.OriginalURL), http.StatusInternalServerError, h.logger)
 				return
 			}
 			w.Write(resp)
@@ -448,7 +448,7 @@ func (h *URLHandler) UpdateURLHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	resp, err := json.Marshal(model.URLUpdateResponse{OriginalURL: updatedEntity})
 	if err != nil {
-		handler.ErrorResponse(w, "could not marshal request body", http.StatusInternalServerError, h.logger)
+		http2.ErrorResponse(w, "could not marshal request body", http.StatusInternalServerError, h.logger)
 		return
 	}
 	w.Write(resp)
@@ -471,7 +471,7 @@ func (h *URLHandler) DeleteURLHandler(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		if errors.Is(err, urls.ErrURLNotFound) {
-			handler.ErrorResponse(w, fmt.Sprintf("url with short url '%s' not found", shortURL), http.StatusBadRequest, h.logger)
+			http2.ErrorResponse(w, fmt.Sprintf("url with short url '%s' not found", shortURL), http.StatusBadRequest, h.logger)
 			return
 		}
 		w.WriteHeader(http.StatusBadRequest)
@@ -540,7 +540,7 @@ func getOrCreateUserID(h *URLHandler, w http.ResponseWriter, r *http.Request) (i
 		if err != nil && userID == -1 {
 			user, err = h.userService.Create(*h.ctx, r.RemoteAddr)
 			if err != nil {
-				handler.ErrorResponse(w, "could not create user", http.StatusInternalServerError, h.logger)
+				http2.ErrorResponse(w, "could not create user", http.StatusInternalServerError, h.logger)
 				return -1, err
 			}
 			userID = user.ID
@@ -565,7 +565,7 @@ func getOrCreateUserID(h *URLHandler, w http.ResponseWriter, r *http.Request) (i
 			}
 			token, err := h.userService.Login(user.ID, h.cfg)
 			if err != nil {
-				handler.ErrorResponse(w, err.Error(), http.StatusBadRequest, h.logger)
+				http2.ErrorResponse(w, err.Error(), http.StatusBadRequest, h.logger)
 				return -1, fmt.Errorf("could not create token: %w", err)
 			}
 			http.SetCookie(w, &http.Cookie{

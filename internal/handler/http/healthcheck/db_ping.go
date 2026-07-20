@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/artni96/url-shortener/internal/handler/http/middlewares"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -11,7 +12,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/artni96/url-shortener/internal/config"
-	"github.com/artni96/url-shortener/internal/handler/middlewares"
 	"github.com/artni96/url-shortener/internal/logger"
 )
 

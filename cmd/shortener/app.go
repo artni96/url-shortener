@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
 	"math"
@@ -13,12 +12,14 @@ import (
 	"time"
 
 	_ "github.com/artni96/url-shortener/api/docs"
+	"github.com/artni96/url-shortener/cmd/shortener/servers"
 	"github.com/artni96/url-shortener/internal/audit"
 	"github.com/artni96/url-shortener/internal/config"
 	"github.com/artni96/url-shortener/internal/config/db"
-	"github.com/artni96/url-shortener/internal/handler/healthcheck"
-	statshandler "github.com/artni96/url-shortener/internal/handler/stats"
-	"github.com/artni96/url-shortener/internal/handler/urls"
+	"github.com/artni96/url-shortener/internal/handler/grpc/interceptors"
+	"github.com/artni96/url-shortener/internal/handler/http/healthcheck"
+	statshandler "github.com/artni96/url-shortener/internal/handler/http/stats"
+	"github.com/artni96/url-shortener/internal/handler/http/urls"
 	"github.com/artni96/url-shortener/internal/logger"
 	"github.com/artni96/url-shortener/internal/model"
 	"github.com/artni96/url-shortener/internal/repository/stats"
@@ -28,8 +29,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	httpSwagger "github.com/swaggo/http-swagger"
 	"go.uber.org/zap"
-	"golang.org/x/crypto/acme/autocert"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc"
 )
 
 // run launches the app with all dependencies.
@@ -138,18 +139,49 @@ func run(cfg *config.Config) error {
 		return nil
 	})
 
-	newServer := &http.Server{
+	newHTTPServer := &http.Server{
 		Addr:    app.Cfg.ServerAddress,
 		Handler: mainRouter,
 	}
+
+	newGRPCServer := grpc.NewServer(
+		grpc.ChainUnaryInterceptor(
+			interceptors.AuthInterceptor(app),
+			interceptors.SubnetInterceptor(app)),
+	)
+
 	var errRunServer error
+
+	outputConfig, err := stdoutConfig(app.Cfg)
+	if err != nil {
+		app.Logger.Error("failed to prepare output config data", zap.Error(err))
+		return err
+	}
+	app.Logger.Info(outputConfig)
+
 	eg.Go(func() error {
-		if err = runServer(app, newServer); err != nil {
+		if err = servers.NewHTTPServer(app, newHTTPServer); err != nil {
 			if errRunServer = shutdownCtx.Err(); errRunServer != nil {
 				app.Logger.Info("a closing signal received, failed to maintain running server", zap.Error(err))
 				return errRunServer
 			}
 			return err
+		}
+		return nil
+	})
+
+	eg.Go(func() error {
+		err = servers.NewGRPCServer(newGRPCServer, app, *urlService, *userService)
+		if errRunServer = shutdownCtx.Err(); errRunServer != nil {
+			select {
+			case _, ok := <-isClosedChan:
+				if ok {
+					app.Logger.Info("failed to launch GRPC server", zap.Error(err))
+				} else {
+					app.Logger.Info("gRPC server stopped gracefully")
+				}
+			}
+
 		}
 		return nil
 	})
@@ -189,12 +221,13 @@ func run(cfg *config.Config) error {
 	})
 
 	eg.Go(func() error {
-		if err = newServer.Shutdown(gsCtx); err != nil {
+		if err = newHTTPServer.Shutdown(gsCtx); err != nil {
 			app.Logger.Info("failed to shutdown server gracefully", zap.Error(err))
 			return err
 		}
+		newGRPCServer.GracefulStop()
 		close(auditChan)
-		app.Logger.Info("server stopped gracefully, keep on processing left requests")
+		app.Logger.Info("HTTP server stopped gracefully, keep on processing left requests")
 		if app.DB != nil {
 			if err = app.DB.Close(); err != nil {
 				app.Logger.Info("failed to close database gracefully", zap.Error(err))
@@ -216,12 +249,36 @@ func run(cfg *config.Config) error {
 	return nil
 }
 
+// fsCountdown counts down left time of forceful shutdown.
+func fsCountdown(ctx context.Context, app *config.App, isClosedChan <-chan struct{}) {
+	deadline, _ := ctx.Deadline()
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-isClosedChan:
+			return
+		case <-ticker.C:
+			timeLeft := int(math.Ceil(time.Until(deadline).Seconds()))
+			if timeLeft == 0 {
+				return
+			}
+			if timeLeft == 15 || timeLeft == 10 || (timeLeft <= 5 && timeLeft > 0) {
+				app.Logger.Info(fmt.Sprintf("forceful app shutdown in %d sec", timeLeft))
+			}
+		}
+	}
+}
+
 // stdoutConfig provides stdout of the app config.
 func stdoutConfig(cfg *config.Config) (string, error) {
 	var resp string
 	resp += fmt.Sprintf("\n\nApp config: \n")
 	resp += fmt.Sprintf("	Mode: %s\n", cfg.Mode)
-	resp += fmt.Sprintf("	Server Address: %s\n", cfg.ServerAddress)
+	resp += fmt.Sprintf("	HTTP Server Address: %s\n", cfg.ServerAddress)
+	resp += fmt.Sprintf("	gRPC Server Address: %s\n", cfg.GRPCAddress)
 	resp += fmt.Sprintf("	Base URL: %s\n", cfg.ResponseDomain)
 	if cfg.DatabaseDsn != "" {
 		resp += fmt.Sprintf("	Database is applied: %t\n", true)
@@ -258,63 +315,4 @@ func stdoutConfig(cfg *config.Config) (string, error) {
 	resp += fmt.Sprintf("	Host white list: %s", cfg.HostWhitelist)
 
 	return resp, nil
-}
-
-// runServer launches the server according to the app config.
-func runServer(app *config.App, server *http.Server) error {
-	outputConfig, err := stdoutConfig(app.Cfg)
-	if err != nil {
-		app.Logger.Error("failed to prepare output config data", zap.Error(err))
-		return err
-	}
-
-	if app.Cfg.EnableHTTPS {
-		if app.Cfg.Mode == "prod" {
-			manager := &autocert.Manager{
-				Cache:      autocert.DirCache("cache"),
-				Prompt:     autocert.AcceptTOS,
-				HostPolicy: autocert.HostWhitelist(app.Cfg.HostWhitelist...),
-			}
-			server.TLSConfig = manager.TLSConfig()
-		}
-
-		app.Logger.Info(outputConfig)
-		err = server.ListenAndServeTLS(app.Cfg.CertFile, app.Cfg.KeyFile)
-		if err != nil && !errors.Is(err, http.ErrServerClosed) {
-			app.Logger.Error("failed to start HTTPS server", zap.Error(err))
-			return err
-		}
-		return nil
-	}
-
-	app.Logger.Info(outputConfig)
-	err = server.ListenAndServe()
-	if err != nil && !errors.Is(err, http.ErrServerClosed) {
-		app.Logger.Error("failed to start HTTP server", zap.Error(err))
-		return err
-	}
-	return nil
-}
-
-// fsCountdown counts down left time of forceful shutdown.
-func fsCountdown(ctx context.Context, app *config.App, isClosedChan <-chan struct{}) {
-	deadline, _ := ctx.Deadline()
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-isClosedChan:
-			return
-		case <-ticker.C:
-			timeLeft := int(math.Ceil(time.Until(deadline).Seconds()))
-			if timeLeft == 0 {
-				return
-			}
-			if timeLeft == 15 || timeLeft == 10 || (timeLeft <= 5 && timeLeft > 0) {
-				app.Logger.Info(fmt.Sprintf("forceful app shutdown in %d sec", timeLeft))
-			}
-		}
-	}
 }
