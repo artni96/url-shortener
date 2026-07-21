@@ -11,8 +11,10 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
+// GRPCServerHandler is an entrypoint to the gRPC server services.
 type GRPCServerHandler struct {
 	pb.UnimplementedShortenerServiceServer
 	URLService  service.URLService
@@ -47,6 +49,27 @@ func (s *GRPCServerHandler) ShortenURL(ctx context.Context, req *pb.URLShortenRe
 	}
 
 	response.SetResult(shortURL)
+	return &response, nil
+}
+
+func (s *GRPCServerHandler) ListUserURLs(ctx context.Context, empty *emptypb.Empty) (*pb.UserURLsResponse, error) {
+	var response pb.UserURLsResponse
+
+	strUserID := ctx.Value("user_id")
+	userID := strUserID.(int)
+
+	x, err := s.URLService.GetUserList(ctx, s.Cfg.ResponseDomain, userID)
+	if err != nil {
+		return nil, status.Errorf(codes.Aborted, "failed to list user URLs: %s", err)
+	}
+	var y []*pb.URLData
+	for _, url := range x {
+		i := pb.URLData{}
+		i.SetShortUrl(url.OriginalURL)
+		i.SetOriginalUrl(url.OriginalURL)
+		y = append(y, &i)
+	}
+	response.SetUrl(y)
 	return &response, nil
 }
 
