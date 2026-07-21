@@ -69,18 +69,18 @@ func (s *GRPCServerHandler) ListUserURLs(ctx context.Context, empty *emptypb.Emp
 	strUserID := ctx.Value("user_id")
 	userID := strUserID.(int)
 
-	x, err := s.URLService.GetUserList(ctx, s.App.Cfg.ResponseDomain, userID)
+	userURLs, err := s.URLService.GetUserList(ctx, s.App.Cfg.ResponseDomain, userID)
 	if err != nil {
 		return nil, status.Errorf(codes.Aborted, "failed to list user URLs: %s", err)
 	}
-	var y []*pb.URLData
-	for _, url := range x {
-		i := pb.URLData{}
-		i.SetShortUrl(url.OriginalURL)
-		i.SetOriginalUrl(url.OriginalURL)
-		y = append(y, &i)
+	var pbURLs []*pb.URLData
+	for _, url := range userURLs {
+		pbURL := pb.URLData{}
+		pbURL.SetShortUrl(url.OriginalURL)
+		pbURL.SetOriginalUrl(url.OriginalURL)
+		pbURLs = append(pbURLs, &pbURL)
 	}
-	response.SetUrl(y)
+	response.SetUrl(pbURLs)
 	return &response, nil
 }
 
