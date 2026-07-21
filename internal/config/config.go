@@ -69,7 +69,7 @@ func ParseFlags() (*Config, error) {
 	fs.StringVar(&conf.TrustedSubnet, "t", "", "trusted subnet")
 
 	var grpcPort string
-	fs.StringVar(&grpcPort, "g", "3200", "grps port")
+	fs.StringVar(&grpcPort, "g", "3200", "gRPC port")
 
 	err := fs.Parse(os.Args[1:])
 	if err != nil {

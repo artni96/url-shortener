@@ -3,6 +3,7 @@ package urls
 import (
 	"context"
 	"fmt"
+	"time"
 
 	pb "github.com/artni96/url-shortener/api/proto"
 	"github.com/artni96/url-shortener/internal/config"
@@ -19,7 +20,7 @@ type GRPCServerHandler struct {
 	pb.UnimplementedShortenerServiceServer
 	URLService  service.URLService
 	UserService service.UserService
-	Cfg         *config.Config
+	App         *config.App
 }
 
 func (s *GRPCServerHandler) ExpandURL(ctx context.Context, req *pb.URLExpandRequest) (*pb.URLExpandResponse, error) {
@@ -43,12 +44,22 @@ func (s *GRPCServerHandler) ShortenURL(ctx context.Context, req *pb.URLShortenRe
 		OriginalURL: req.GetUrl(),
 		CreatedBy:   userID,
 	}
-	shortURL, err := s.URLService.Create(ctx, requestEntity, s.Cfg.ResponseDomain)
+	shortURL, err := s.URLService.Create(ctx, requestEntity, s.App.Cfg.ResponseDomain)
 	if err != nil {
 		return nil, status.Errorf(codes.AlreadyExists, "failed to create shorten URL: %s", err)
 	}
 
 	response.SetResult(shortURL)
+
+	auditEntity := model.AuditEntity{
+		Ts:     time.Now().Unix(),
+		URL:    req.GetUrl(),
+		UserID: userID,
+		Action: "shorten",
+	}
+	if s.App.AuditChan != nil {
+		s.App.AuditChan <- auditEntity
+	}
 	return &response, nil
 }
 
@@ -58,7 +69,7 @@ func (s *GRPCServerHandler) ListUserURLs(ctx context.Context, empty *emptypb.Emp
 	strUserID := ctx.Value("user_id")
 	userID := strUserID.(int)
 
-	x, err := s.URLService.GetUserList(ctx, s.Cfg.ResponseDomain, userID)
+	x, err := s.URLService.GetUserList(ctx, s.App.Cfg.ResponseDomain, userID)
 	if err != nil {
 		return nil, status.Errorf(codes.Aborted, "failed to list user URLs: %s", err)
 	}
@@ -81,7 +92,7 @@ func (s *GRPCServerHandler) Login(ctx context.Context, req *pb.LoginRequest) (*p
 	}
 	userID, err := s.UserService.GetByIP(ctx, peers.Addr.String())
 	if userID != -1 && err == nil {
-		jwt, err := s.UserService.Login(userID, s.Cfg)
+		jwt, err := s.UserService.Login(userID, s.App.Cfg)
 		if err != nil {
 			return nil, fmt.Errorf("failed to login: %w", err)
 		}
@@ -94,7 +105,7 @@ func (s *GRPCServerHandler) Login(ctx context.Context, req *pb.LoginRequest) (*p
 		return nil, fmt.Errorf("failed to create user token: %w", err)
 	}
 	userID = user.ID
-	jwt, err := s.UserService.Login(user.ID, s.Cfg)
+	jwt, err := s.UserService.Login(user.ID, s.App.Cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to login: %w", err)
 	}

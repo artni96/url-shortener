@@ -22,7 +22,7 @@ func NewGRPCServer(server *grpc.Server, app *config.App, urlService service.URLS
 	pb.RegisterShortenerServiceServer(server, &urls.GRPCServerHandler{
 		URLService:  urlService,
 		UserService: userService,
-		Cfg:         app.Cfg,
+		App:         app,
 	})
 	if err = server.Serve(listen); err != nil {
 		return fmt.Errorf("%w: %w", ErrGRPCServerFailed, err)
