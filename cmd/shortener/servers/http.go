@@ -14,7 +14,8 @@ import (
 
 // HTTPServer represents the HTTP server instance for the app.
 type HTTPServer struct {
-	app    *config.App
+	cfg    *config.Config
+	logger *zap.Logger
 	r      *chi.Mux
 	server *http.Server
 }
@@ -22,7 +23,7 @@ type HTTPServer struct {
 // InitHTTPServer initializes a new HTTP server.
 func (s *HTTPServer) InitHTTPServer() {
 	s.server = &http.Server{
-		Addr:    s.app.Cfg.ServerAddress,
+		Addr:    s.cfg.ServerAddress,
 		Handler: s.r,
 	}
 }
@@ -31,19 +32,19 @@ func (s *HTTPServer) InitHTTPServer() {
 func (s *HTTPServer) RunHTTPServer() error {
 	s.InitHTTPServer()
 
-	if s.app.Cfg.EnableHTTPS {
-		if s.app.Cfg.Mode == "prod" {
+	if s.cfg.EnableHTTPS {
+		if s.cfg.Mode == "prod" {
 			manager := &autocert.Manager{
 				Cache:      autocert.DirCache("cache"),
 				Prompt:     autocert.AcceptTOS,
-				HostPolicy: autocert.HostWhitelist(s.app.Cfg.HostWhitelist...),
+				HostPolicy: autocert.HostWhitelist(s.cfg.HostWhitelist...),
 			}
 			s.server.TLSConfig = manager.TLSConfig()
 		}
 
-		err := s.server.ListenAndServeTLS(s.app.Cfg.CertFile, s.app.Cfg.KeyFile)
+		err := s.server.ListenAndServeTLS(s.cfg.CertFile, s.cfg.KeyFile)
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
-			s.app.Logger.Error("failed to start HTTPS server", zap.Error(err))
+			s.logger.Error("failed to start HTTPS server", zap.Error(err))
 			return err
 		}
 		return nil
@@ -51,7 +52,7 @@ func (s *HTTPServer) RunHTTPServer() error {
 
 	err := s.server.ListenAndServe()
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {
-		s.app.Logger.Error("failed to start HTTP server", zap.Error(err))
+		s.logger.Error("failed to start HTTP server", zap.Error(err))
 		return err
 	}
 	return nil
@@ -67,9 +68,10 @@ func (s *HTTPServer) Shutdown(ctx context.Context) error {
 }
 
 // NewHTTPServer returns a new HTTP server instance.
-func NewHTTPServer(app *config.App, r *chi.Mux) *HTTPServer {
+func NewHTTPServer(cfg *config.Config, logger *zap.Logger, r *chi.Mux) *HTTPServer {
 	return &HTTPServer{
-		app: app,
-		r:   r,
+		cfg:    cfg,
+		logger: logger,
+		r:      r,
 	}
 }

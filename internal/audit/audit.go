@@ -77,7 +77,7 @@ func (s *Semaphore) Release() {
 }
 
 // RunAudit sends Audit entities according to the cfg.
-func RunAudit(app *config.App) error {
+func RunAudit(cfg *config.Config, logger *zap.Logger, auditChan chan model.AuditEntity) error {
 	var sinks []AuditSink
 
 	var wg sync.WaitGroup
@@ -86,15 +86,15 @@ func RunAudit(app *config.App) error {
 	var fileWriter *AuditWriter
 	var fileSink *FileSink
 
-	if app.Cfg.AuditFile != "" {
+	if cfg.AuditFile != "" {
 		var err error
-		fileWriter, err = NewAuditWriter(app.Cfg.AuditFile)
+		fileWriter, err = NewAuditWriter(cfg.AuditFile)
 		if err != nil {
-			app.Logger.Error("failed to initialize file writer", zap.Error(err))
+			logger.Error("failed to initialize file writer", zap.Error(err))
 			return err
 		}
 		defer fileWriter.Close()
-		fileSink = NewFileSink(app, fileWriter)
+		fileSink = NewFileSink(logger, fileWriter)
 		if fileSink != nil {
 			defer fileSink.Close()
 		}
@@ -102,13 +102,13 @@ func RunAudit(app *config.App) error {
 	}
 
 	var httpSink *HTTPSink
-	if app.Cfg.AuditURL != "" {
-		httpSink = NewHTTPSink(app)
+	if cfg.AuditURL != "" {
+		httpSink = NewHTTPSink(logger, cfg)
 		defer httpSink.Close()
 		sinks = append(sinks, httpSink)
 	}
 
-	for obj := range app.AuditChan {
+	for obj := range auditChan {
 		wg.Add(1)
 		semaphore.Acquire()
 
@@ -118,7 +118,7 @@ func RunAudit(app *config.App) error {
 
 			for _, sink := range sinks {
 				if err := sink.Sink(obj); err != nil {
-					app.Logger.Error("failed to run audit entity", zap.Error(err))
+					logger.Error("failed to run audit entity", zap.Error(err))
 				}
 			}
 		}(obj)

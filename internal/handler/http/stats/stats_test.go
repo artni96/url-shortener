@@ -11,34 +11,34 @@ import (
 	"time"
 
 	"github.com/artni96/url-shortener/internal/config"
-	"github.com/artni96/url-shortener/internal/config/db"
 	"github.com/artni96/url-shortener/internal/model"
 	"github.com/artni96/url-shortener/internal/repository/stats"
 	"github.com/artni96/url-shortener/internal/repository/urls"
 	"github.com/artni96/url-shortener/internal/repository/users"
 	"github.com/artni96/url-shortener/internal/service"
+	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 )
 
-func testServices(app config.App, t *testing.T) (service.URLServiceInterface, service.UserServiceInterface, service.StatsServiceInterface) {
-	urlInMemoryRepository, err := urls.NewInMemoryURLRepository(&app)
+func testServices(cfg *config.Config, logger *zap.Logger, db *sqlx.DB, t *testing.T) (service.URLServiceInterface, service.UserServiceInterface, service.StatsServiceInterface) {
+	urlInMemoryRepository, err := urls.NewInMemoryURLRepository(cfg, logger)
 	if err != nil {
 		t.Fatal(err)
 	}
-	urlService := service.NewURLService(nil, urlInMemoryRepository, &app)
+	urlService := service.NewURLService(nil, urlInMemoryRepository, cfg, logger)
 
-	userInMemoryRepository, err := users.NewInMemoryUserRepository(&app)
+	userInMemoryRepository, err := users.NewInMemoryUserRepository(cfg, logger)
 	if err != nil {
 		t.Fatal(err)
 	}
-	userService := service.NewUserService(nil, userInMemoryRepository, &app)
+	userService := service.NewUserService(nil, userInMemoryRepository, cfg, logger)
 
-	statsDBRepository, err := stats.NewDBStatsRepository(&app)
+	statsDBRepository, err := stats.NewDBStatsRepository(db, logger)
 	if err != nil {
 		t.Fatal(err)
 	}
-	statsService := service.NewStatsService(statsDBRepository, &app, userService, urlService)
+	statsService := service.NewStatsService(statsDBRepository, db, userService, urlService)
 	return urlService, userService, statsService
 }
 
@@ -68,23 +68,9 @@ func TestGetStats(t *testing.T) {
 		SecretKey:       "dontshareme",
 	}
 
-	auditChan := make(chan model.AuditEntity, 10)
+	urlService, userService, statsService := testServices(&cfg, testLogger, nil, t)
 
-	app := config.App{
-		DB:        nil,
-		Cfg:       &cfg,
-		Logger:    testLogger,
-		AuditChan: auditChan,
-	}
-
-	testDB, err := db.InitDBConnection(ctx, &app)
-	if err == nil {
-		app.DB = testDB
-	}
-
-	urlService, userService, statsService := testServices(app, t)
-
-	h := NewStatsHandler(app.Logger, statsService)
+	h := NewStatsHandler(testLogger, statsService)
 
 	type want struct {
 		message string

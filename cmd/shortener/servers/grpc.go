@@ -10,6 +10,7 @@ import (
 	"github.com/artni96/url-shortener/internal/handler/grpc/interceptors"
 	"github.com/artni96/url-shortener/internal/handler/grpc/urls"
 	"github.com/artni96/url-shortener/internal/service"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
@@ -18,7 +19,8 @@ var ErrGRPCServerFailed = errors.New("gRPC-server failed to launch")
 
 // GRPCServer represents the gRPC server instance for the app.
 type GRPCServer struct {
-	app         *config.App
+	cfg         *config.Config
+	logger      *zap.Logger
 	urlService  *service.URLService
 	userService *service.UserService
 	server      *grpc.Server
@@ -27,7 +29,7 @@ type GRPCServer struct {
 
 // InitGRPCServer initializes a new gRPC server.
 func (s *GRPCServer) InitGRPCServer() error {
-	if s.app.Cfg.EnableHTTPS {
+	if s.cfg.EnableHTTPS {
 		err := s.PrepareCredentials()
 		if err != nil {
 			return err
@@ -36,9 +38,9 @@ func (s *GRPCServer) InitGRPCServer() error {
 		s.server = grpc.NewServer(
 			grpc.Creds(s.creds),
 			grpc.ChainUnaryInterceptor(
-				interceptors.RequestLoggerInterceptor(s.app),
-				interceptors.AuthInterceptor(s.app),
-				interceptors.PanicInterceptor(s.app),
+				interceptors.RequestLoggerInterceptor(s.logger),
+				interceptors.AuthInterceptor(s.cfg, s.logger),
+				interceptors.PanicInterceptor(s.logger),
 			),
 		)
 		return nil
@@ -46,9 +48,9 @@ func (s *GRPCServer) InitGRPCServer() error {
 	}
 	s.server = grpc.NewServer(
 		grpc.ChainUnaryInterceptor(
-			interceptors.RequestLoggerInterceptor(s.app),
-			interceptors.AuthInterceptor(s.app),
-			interceptors.PanicInterceptor(s.app),
+			interceptors.RequestLoggerInterceptor(s.logger),
+			interceptors.AuthInterceptor(s.cfg, s.logger),
+			interceptors.PanicInterceptor(s.logger),
 		),
 	)
 
@@ -62,14 +64,14 @@ func (s *GRPCServer) RunGRPCServer() error {
 		return fmt.Errorf("failed to initialize gRPC server: %w", err)
 	}
 
-	listen, err := net.Listen("tcp", s.app.Cfg.GRPCAddress)
+	listen, err := net.Listen("tcp", s.cfg.GRPCAddress)
 	if err != nil {
 		return fmt.Errorf("failed to initialize listener for gRPC server: %w", err)
 	}
 	pb.RegisterShortenerServiceServer(s.server, &urls.GRPCServerHandler{
 		URLService:  *s.urlService,
 		UserService: *s.userService,
-		App:         s.app,
+		//App:         s.app,
 	})
 	if err = s.server.Serve(listen); err != nil {
 		return fmt.Errorf("%w: %w", ErrGRPCServerFailed, err)
@@ -79,7 +81,7 @@ func (s *GRPCServer) RunGRPCServer() error {
 
 // PrepareCredentials sets tcp credentials for the gRPC server.
 func (s *GRPCServer) PrepareCredentials() error {
-	creds, err := credentials.NewServerTLSFromFile(s.app.Cfg.CertFile, s.app.Cfg.KeyFile)
+	creds, err := credentials.NewServerTLSFromFile(s.cfg.CertFile, s.cfg.KeyFile)
 	if err != nil {
 		return fmt.Errorf("failed to create credentials for gRPC server: %w", err)
 	}
@@ -93,9 +95,10 @@ func (s *GRPCServer) Shutdown() {
 }
 
 // NewGRPCServer returns a new gRPC server instance.
-func NewGRPCServer(app *config.App, urlService *service.URLService, userService *service.UserService) *GRPCServer {
+func NewGRPCServer(cfg *config.Config, logger *zap.Logger, urlService *service.URLService, userService *service.UserService) *GRPCServer {
 	return &GRPCServer{
-		app:         app,
+		cfg:         cfg,
+		logger:      logger,
 		urlService:  urlService,
 		userService: userService,
 	}

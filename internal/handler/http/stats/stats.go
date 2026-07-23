@@ -43,16 +43,16 @@ func (s *StatsHandler) GetStatsHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(response)
 }
 
-func StatsRouter(app *config.App, service service.StatsServiceInterface, trustedSubnet string) chi.Router {
+func StatsRouter(logger *zap.Logger, service service.StatsServiceInterface, trustedSubnet string) chi.Router {
 	r := chi.NewRouter()
 
-	r.Use(middlewares2.PanicRecoverer(app.Logger))
-	r.Use(middlewares2.CheckIP(app.Logger, trustedSubnet))
+	r.Use(middlewares2.PanicRecoverer(logger))
+	r.Use(middlewares2.CheckIP(logger, trustedSubnet))
 	r.Use(middleware.RealIP)
-	r.Use(logger2.RequestLoggerMiddleware(app.Logger))
+	r.Use(logger2.RequestLoggerMiddleware(logger))
 	r.Use(config.GzipMiddleware)
 
-	urlHandler := NewStatsHandler(app.Logger, service)
+	urlHandler := NewStatsHandler(logger, service)
 
 	r.Route("/", func(r chi.Router) {
 		r.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {

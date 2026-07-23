@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/artni96/url-shortener/internal/config"
 	"github.com/artni96/url-shortener/internal/model"
 	"github.com/jmoiron/sqlx"
 	"go.uber.org/zap"
@@ -47,6 +46,6 @@ func (repo *DBStatsRepository) Get(ctx context.Context) (model.StatsResponse, er
 	return model.StatsResponse{URLs: urlsAmount, Users: usersAmount}, nil
 }
 
-func NewDBStatsRepository(app *config.App) (*DBStatsRepository, error) {
-	return &DBStatsRepository{db: app.DB, logger: app.Logger}, nil
+func NewDBStatsRepository(db *sqlx.DB, logger *zap.Logger) (*DBStatsRepository, error) {
+	return &DBStatsRepository{db: db, logger: logger}, nil
 }

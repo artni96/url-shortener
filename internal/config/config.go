@@ -9,11 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jmoiron/sqlx"
 	"github.com/joho/godotenv"
-	"go.uber.org/zap"
-
-	"github.com/artni96/url-shortener/internal/model"
 )
 
 type jsonConfig struct {
@@ -192,14 +188,6 @@ func ParseFlags() (*Config, error) {
 	}
 
 	return &conf, nil
-}
-
-// generate:reset
-type App struct {
-	DB        *sqlx.DB
-	Cfg       *Config
-	Logger    *zap.Logger
-	AuditChan chan model.AuditEntity
 }
 
 // readJSONConfig read config settings from a JSON file.

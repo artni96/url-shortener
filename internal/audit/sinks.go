@@ -20,34 +20,36 @@ type AuditSink interface {
 // generate:reset
 type HTTPSink struct {
 	client *http.Client
-	app    *config.App
+	logger *zap.Logger
+	cfg    *config.Config
 }
 
-func NewHTTPSink(app *config.App) *HTTPSink {
+func NewHTTPSink(logger *zap.Logger, cfg *config.Config) *HTTPSink {
 	return &HTTPSink{client: &http.Client{
 		Timeout: 10 * time.Second,
 	},
-		app: app,
+		logger: logger,
+		cfg:    cfg,
 	}
 }
 
 func (s *HTTPSink) Sink(obj model.AuditEntity) error {
 	byteBody, err := json.Marshal(obj)
 	if err != nil {
-		s.app.Logger.Error("failed to marshal audit entity", zap.Error(err))
+		s.logger.Error("failed to marshal audit entity", zap.Error(err))
 		return err
 	}
 	stringBody := strings.NewReader(string(byteBody))
-	req, err := http.NewRequest("POST", s.app.Cfg.AuditURL, stringBody)
+	req, err := http.NewRequest("POST", s.cfg.AuditURL, stringBody)
 	if err != nil {
-		s.app.Logger.Error("failed to create audit entity", zap.Error(err))
+		s.logger.Error("failed to create audit entity", zap.Error(err))
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := s.client.Do(req)
 	if err != nil {
-		s.app.Logger.Error("failed to send audit entity", zap.Error(err))
+		s.logger.Error("failed to send audit entity", zap.Error(err))
 		return err
 	}
 	defer resp.Body.Close()
@@ -59,14 +61,14 @@ func (s *HTTPSink) Close() {
 }
 
 type FileSink struct {
-	app        *config.App
+	logger     *zap.Logger
 	fileWriter *AuditWriter
 	mu         sync.Mutex
 }
 
-func NewFileSink(app *config.App, fileWriter *AuditWriter) *FileSink {
+func NewFileSink(logger *zap.Logger, fileWriter *AuditWriter) *FileSink {
 	return &FileSink{
-		app:        app,
+		logger:     logger,
 		fileWriter: fileWriter,
 	}
 }
@@ -76,7 +78,7 @@ func (s *FileSink) Sink(obj model.AuditEntity) error {
 	defer s.mu.Unlock()
 	err := s.fileWriter.WriteAuditEntity(obj)
 	if err != nil {
-		s.app.Logger.Error("failed to write audit entity", zap.Error(err))
+		s.logger.Error("failed to write audit entity", zap.Error(err))
 		return err
 	}
 	return nil

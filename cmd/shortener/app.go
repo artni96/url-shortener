@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"math"
 	"os"
 	"os/signal"
@@ -11,9 +10,9 @@ import (
 	"time"
 
 	_ "github.com/artni96/url-shortener/api/docs"
+	appFacade "github.com/artni96/url-shortener/internal/app"
 	"github.com/artni96/url-shortener/internal/audit"
 	"github.com/artni96/url-shortener/internal/config"
-	"github.com/artni96/url-shortener/internal/logger"
 	"github.com/artni96/url-shortener/internal/model"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -23,37 +22,37 @@ import (
 func run(cfg *config.Config) error {
 	ctx := context.Background()
 	eg := new(errgroup.Group)
-	appLogger, err := logger.InitLogger(cfg.DebugLevel)
-	if err != nil {
-		log.Printf("failed to initialize application logger: %v\n", err)
-		return err
-	}
+	//appLogger, err := logger.InitLogger(cfg.DebugLevel)
+	//if err != nil {
+	//	log.Printf("failed to initialize application logger: %v\n", err)
+	//	return err
+	//}
 	auditChan := make(chan model.AuditEntity, 100)
 	isClosedChan := make(chan struct{})
 
-	appCfg := &config.App{
-		DB:        nil,
-		Cfg:       cfg,
-		Logger:    appLogger,
-		AuditChan: auditChan,
-	}
+	//appCfg := &config.App{
+	//	DB:        nil,
+	//	Cfg:       cfg,
+	//	Logger:    appLogger,
+	//	AuditChan: auditChan,
+	//}
 
-	appFacade := NewAppFacade(eg, appCfg, auditChan, isClosedChan)
-	err = appFacade.InitDependencies(ctx)
+	app := appFacade.NewAppFacade(eg, cfg, auditChan, isClosedChan)
+	err := app.InitDependencies(ctx)
 	if err != nil {
-		appCfg.Logger.Info("failed to initialize app dependencies", zap.Error(err))
+		app.Logger.Info("failed to initialize app dependencies", zap.Error(err))
 		return err
 	}
-	defer appFacade.CloseDB()
+	defer app.CloseDB()
 
 	shutdownCtx, stop := signal.NotifyContext(ctx, syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGINT)
 	defer stop()
 
 	var errRunAudit error
 	eg.Go(func() error {
-		if err = audit.RunAudit(appCfg); err != nil {
+		if err = audit.RunAudit(app.Cfg, app.Logger, app.AuditChan); err != nil {
 			if errRunAudit = shutdownCtx.Err(); errRunAudit != nil {
-				appCfg.Logger.Error("a closing signal received, failed to maintain running audit service", zap.Error(err))
+				app.Logger.Error("a closing signal received, failed to maintain running audit service", zap.Error(err))
 				return errRunAudit
 			}
 			return err
@@ -61,14 +60,14 @@ func run(cfg *config.Config) error {
 		return nil
 	})
 
-	appFacade.StartServers(shutdownCtx)
+	app.StartServers(shutdownCtx)
 
-	outputConfig, err := stdoutConfig(appCfg.Cfg)
+	outputConfig, err := stdoutConfig(app.Cfg)
 	if err != nil {
-		appCfg.Logger.Error("failed to prepare output config data", zap.Error(err))
+		app.Logger.Error("failed to prepare output config data", zap.Error(err))
 		return err
 	}
-	appCfg.Logger.Info(outputConfig)
+	app.Logger.Info(outputConfig)
 
 	<-shutdownCtx.Done()
 
@@ -76,7 +75,7 @@ func run(cfg *config.Config) error {
 	gsCtx, gsCancel := context.WithTimeout(ctx, gsPeriod)
 	defer gsCancel()
 
-	appCfg.Logger.Info("shutting the app down", zap.Time("time", time.Now()))
+	app.Logger.Info("shutting the app down", zap.Time("time", time.Now()))
 
 	eg.Go(func() error {
 		<-gsCtx.Done()
@@ -84,16 +83,16 @@ func run(cfg *config.Config) error {
 		case <-isClosedChan:
 			return nil
 		default:
-			appCfg.Logger.Info("graceful period has expired", zap.Time("time", time.Now()))
-			appCfg.Logger.Info("app will be shutdown forcefully in 30 seconds")
+			app.Logger.Info("graceful period has expired", zap.Time("time", time.Now()))
+			app.Logger.Info("app will be shutdown forcefully in 30 seconds")
 			fsCtx, fsCancel := context.WithTimeout(ctx, time.Second*30)
 			defer fsCancel()
 
-			go fsCountdown(fsCtx, appCfg, isClosedChan)
+			go fsCountdown(fsCtx, app.Logger, isClosedChan)
 
 			select {
 			case <-fsCtx.Done():
-				appCfg.Logger.Info("app stopped forcefully", zap.Time("time", time.Now()))
+				app.Logger.Info("app stopped forcefully", zap.Time("time", time.Now()))
 				os.Exit(0)
 
 			case _, ok := <-isClosedChan:
@@ -105,19 +104,19 @@ func run(cfg *config.Config) error {
 		return nil
 	})
 
-	appFacade.StopServers(gsCtx, gsCancel)
+	app.StopServers(gsCtx, gsCancel)
 
 	if err = eg.Wait(); err != nil {
-		appCfg.Logger.Info("failed to wait for errgroup goroutines completion", zap.Error(err))
+		app.Logger.Info("failed to wait for errgroup goroutines completion", zap.Error(err))
 		return err
 	}
 
-	appCfg.Logger.Info("app stopped gracefully")
+	app.Logger.Info("app stopped gracefully")
 	return nil
 }
 
 // fsCountdown counts down left time of forceful shutdown.
-func fsCountdown(ctx context.Context, app *config.App, isClosedChan <-chan struct{}) {
+func fsCountdown(ctx context.Context, logger *zap.Logger, isClosedChan <-chan struct{}) {
 	deadline, _ := ctx.Deadline()
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
@@ -133,7 +132,7 @@ func fsCountdown(ctx context.Context, app *config.App, isClosedChan <-chan struc
 				return
 			}
 			if timeLeft == 15 || timeLeft == 10 || (timeLeft <= 5 && timeLeft > 0) {
-				app.Logger.Info(fmt.Sprintf("forceful app shutdown in %d sec", timeLeft))
+				logger.Info(fmt.Sprintf("forceful app shutdown in %d sec", timeLeft))
 			}
 		}
 	}

@@ -17,7 +17,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/artni96/url-shortener/internal/config"
-	"github.com/artni96/url-shortener/internal/config/db"
 	"github.com/artni96/url-shortener/internal/model"
 	"github.com/artni96/url-shortener/internal/repository/urls"
 	"github.com/artni96/url-shortener/internal/repository/users"
@@ -41,30 +40,18 @@ func URLTestHandler(t *testing.T) *URLHandler {
 	}
 
 	auditChan := make(chan model.AuditEntity, 10)
-
-	app := config.App{
-		DB:        nil,
-		Cfg:       &cfg,
-		Logger:    testLogger,
-		AuditChan: auditChan,
-	}
-
-	testDB, err := db.InitDBConnection(ctx, &app)
-	if err == nil {
-		app.DB = testDB
-	}
-
-	urlInMemoryRepository, err := urls.NewInMemoryURLRepository(&app)
+	
+	urlInMemoryRepository, err := urls.NewInMemoryURLRepository(&cfg, testLogger)
 	if err != nil {
 		t.Fatal(err)
 	}
-	userInMemoryRepository, err := users.NewInMemoryUserRepository(&app)
+	userInMemoryRepository, err := users.NewInMemoryUserRepository(&cfg, testLogger)
 	if err != nil {
 		t.Fatal(err)
 	}
-	urlService := service.NewURLService(nil, urlInMemoryRepository, &app)
-	userService := service.NewUserService(nil, userInMemoryRepository, &app)
-	h := NewURLHandler(&ctx, &app, urlService, userService, &cfg)
+	urlService := service.NewURLService(nil, urlInMemoryRepository, &cfg, testLogger)
+	userService := service.NewUserService(nil, userInMemoryRepository, &cfg, testLogger)
+	h := NewURLHandler(&ctx, &cfg, testLogger, urlService, userService, auditChan)
 
 	return h
 }

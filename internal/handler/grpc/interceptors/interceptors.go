@@ -22,7 +22,7 @@ func GetUserIDFromContext(ctx context.Context) (int, bool) {
 	return userID, ok
 }
 
-func AuthInterceptor(app *config.App) grpc.UnaryServerInterceptor {
+func AuthInterceptor(cfg *config.Config, logger *zap.Logger) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		if info.FullMethod == "/urlsProto.ShortenerService/Login" || info.FullMethod == "/urlsProto.ShortenerService/ExpandURL" {
 			return handler(ctx, req)
@@ -30,19 +30,19 @@ func AuthInterceptor(app *config.App) grpc.UnaryServerInterceptor {
 
 		if md, ok := metadata.FromIncomingContext(ctx); ok {
 			if len(md["authorization"]) == 0 {
-				app.Logger.Info("there is no authorization header in the request")
+				logger.Info("there is no authorization header in the request")
 				return nil, status.Errorf(codes.Unauthenticated, "invalid token")
 			}
 
 			token := md.Get("authorization")[0]
 			if token == "" {
-				app.Logger.Info("authorization header is empty")
+				logger.Info("authorization header is empty")
 				return nil, status.Errorf(codes.Unauthenticated, "invalid token")
 			}
 
-			userID := service.GetUserID(token, app.Cfg)
+			userID := service.GetUserID(token, cfg)
 			if userID == -1 {
-				app.Logger.Info("user is not authorized via jwt token")
+				logger.Info("user is not authorized via jwt token")
 				return nil, status.Errorf(codes.Unauthenticated, "invalid token")
 			}
 			ctx = context.WithValue(ctx, userIDCtxKey{}, userID)
@@ -53,11 +53,11 @@ func AuthInterceptor(app *config.App) grpc.UnaryServerInterceptor {
 	}
 }
 
-func PanicInterceptor(app *config.App) grpc.UnaryServerInterceptor {
+func PanicInterceptor(logger *zap.Logger) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
 		defer func() {
 			if recovered := recover(); recovered != nil {
-				app.Logger.Info("got panic",
+				logger.Info("got panic",
 					zap.String("error message", fmt.Sprintf("panic recovered: %v\n", recovered)),
 					zap.String("call stack", string(debug.Stack())),
 				)
@@ -69,7 +69,7 @@ func PanicInterceptor(app *config.App) grpc.UnaryServerInterceptor {
 	}
 }
 
-func RequestLoggerInterceptor(app *config.App) grpc.UnaryServerInterceptor {
+func RequestLoggerInterceptor(logger *zap.Logger) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
 		start := time.Now()
 		resp, err = handler(ctx, req)
@@ -80,7 +80,7 @@ func RequestLoggerInterceptor(app *config.App) grpc.UnaryServerInterceptor {
 
 		duration := time.Since(start)
 
-		app.Logger.Info("Request done",
+		logger.Info("Request done",
 			zap.String("method", info.FullMethod),
 			zap.Duration("duration", duration),
 			zap.String("response_status", respStatusCode),

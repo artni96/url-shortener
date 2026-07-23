@@ -12,7 +12,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/artni96/url-shortener/internal/config"
-	"github.com/artni96/url-shortener/internal/logger"
+	appLogger "github.com/artni96/url-shortener/internal/logger"
 )
 
 type Handler struct {
@@ -21,10 +21,10 @@ type Handler struct {
 	ctx *context.Context
 }
 
-func NewHealthCheckHandler(ctx *context.Context, app *config.App) *Handler {
+func NewHealthCheckHandler(ctx *context.Context, db *sqlx.DB, logger *zap.Logger) *Handler {
 	return &Handler{
-		db:  app.DB,
-		log: app.Logger,
+		db:  db,
+		log: logger,
 		ctx: ctx,
 	}
 }
@@ -50,15 +50,15 @@ func (h *Handler) PingHandler(w http.ResponseWriter, r *http.Request) {
 	return
 }
 
-func HealthCheckRouter(ctx *context.Context, app *config.App) http.Handler {
+func HealthCheckRouter(ctx *context.Context, logger *zap.Logger, db *sqlx.DB) http.Handler {
 	r := chi.NewRouter()
 
-	r.Use(middlewares.PanicRecoverer(app.Logger))
+	r.Use(middlewares.PanicRecoverer(logger))
 	r.Use(middleware.RealIP)
-	r.Use(logger.RequestLoggerMiddleware(app.Logger))
+	r.Use(appLogger.RequestLoggerMiddleware(logger))
 	r.Use(config.GzipMiddleware)
 
-	handler := NewHealthCheckHandler(ctx, app)
+	handler := NewHealthCheckHandler(ctx, db, logger)
 	r.Get("/", handler.PingHandler)
 	return r
 }

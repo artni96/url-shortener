@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/artni96/url-shortener/internal/config"
 	"github.com/artni96/url-shortener/internal/model"
 	"github.com/artni96/url-shortener/internal/repository/stats"
+	"github.com/jmoiron/sqlx"
 )
 
 type StatsServiceInterface interface {
@@ -15,14 +15,14 @@ type StatsServiceInterface interface {
 
 type StatsService struct {
 	dbRepository stats.DBStatsRepositoryInterface
-	app          *config.App
+	db           *sqlx.DB
 	userService  *UserService
 	urlService   *URLService
 }
 
 func (s *StatsService) Get(ctx context.Context) (model.StatsResponse, error) {
 	var response model.StatsResponse
-	if s.app.DB != nil {
+	if s.db != nil {
 		response, err := s.dbRepository.Get(ctx)
 		if err != nil {
 			return model.StatsResponse{}, fmt.Errorf("%w", err)
@@ -34,6 +34,6 @@ func (s *StatsService) Get(ctx context.Context) (model.StatsResponse, error) {
 	return response, nil
 }
 
-func NewStatsService(dbRepository stats.DBStatsRepositoryInterface, app *config.App, userService *UserService, urlService *URLService) *StatsService {
-	return &StatsService{dbRepository: dbRepository, app: app, userService: userService, urlService: urlService}
+func NewStatsService(dbRepository stats.DBStatsRepositoryInterface, db *sqlx.DB, userService *UserService, urlService *URLService) *StatsService {
+	return &StatsService{dbRepository: dbRepository, db: db, userService: userService, urlService: urlService}
 }

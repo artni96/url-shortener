@@ -20,7 +20,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/artni96/url-shortener/internal/config"
-	"github.com/artni96/url-shortener/internal/logger"
+	appLogger "github.com/artni96/url-shortener/internal/logger"
 	"github.com/artni96/url-shortener/internal/model"
 	"github.com/artni96/url-shortener/internal/repository/urls"
 	"github.com/artni96/url-shortener/internal/service"
@@ -38,15 +38,15 @@ type URLHandler struct {
 	auditChan      chan<- model.AuditEntity
 }
 
-func NewURLHandler(ctx *context.Context, app *config.App, urlService service.URLServiceInterface, userService service.UserServiceInterface, cfg *config.Config) *URLHandler {
+func NewURLHandler(ctx *context.Context, cfg *config.Config, logger *zap.Logger, urlService service.URLServiceInterface, userService service.UserServiceInterface, auditChan chan model.AuditEntity) *URLHandler {
 	return &URLHandler{
-		responseDomain: app.Cfg.ResponseDomain,
+		responseDomain: cfg.ResponseDomain,
 		urlService:     urlService,
 		userService:    userService,
-		logger:         app.Logger,
+		logger:         logger,
 		ctx:            ctx,
 		cfg:            cfg,
-		auditChan:      app.AuditChan,
+		auditChan:      auditChan,
 	}
 }
 
@@ -580,15 +580,15 @@ func getOrCreateUserID(h *URLHandler, w http.ResponseWriter, r *http.Request) (i
 	return userID, nil
 }
 
-func URLRouter(ctx *context.Context, app *config.App, urlService service.URLServiceInterface, userService service.UserServiceInterface, cfg *config.Config) chi.Router {
+func URLRouter(ctx *context.Context, logger *zap.Logger, urlService service.URLServiceInterface, userService service.UserServiceInterface, cfg *config.Config, auditChan chan model.AuditEntity) chi.Router {
 	r := chi.NewRouter()
 
-	r.Use(middlewares.PanicRecoverer(app.Logger))
+	r.Use(middlewares.PanicRecoverer(logger))
 	r.Use(middleware.RealIP)
-	r.Use(logger.RequestLoggerMiddleware(app.Logger))
+	r.Use(appLogger.RequestLoggerMiddleware(logger))
 	r.Use(config.GzipMiddleware)
 
-	urlHandler := NewURLHandler(ctx, app, urlService, userService, cfg)
+	urlHandler := NewURLHandler(ctx, cfg, logger, urlService, userService, auditChan)
 
 	r.Route("/", func(r chi.Router) {
 		r.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {

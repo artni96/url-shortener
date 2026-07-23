@@ -15,12 +15,12 @@ import (
 	"github.com/artni96/url-shortener/internal/config"
 )
 
-func InitDBConnection(ctx context.Context, app *config.App) (*sqlx.DB, error) {
-	if app.Cfg.DatabaseDsn == "" {
+func InitDBConnection(ctx context.Context, cfg *config.Config, logger *zap.Logger) (*sqlx.DB, error) {
+	if cfg.DatabaseDsn == "" {
 		return nil, errors.New("database dsn is not provided")
 	}
 
-	db, err := sqlx.Open("pgx", app.Cfg.DatabaseDsn)
+	db, err := sqlx.Open("pgx", cfg.DatabaseDsn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
@@ -34,11 +34,11 @@ func InitDBConnection(ctx context.Context, app *config.App) (*sqlx.DB, error) {
 	}
 
 	if err := runMigrations(db); err != nil {
-		app.Logger.Info("failed to run migrations",
+		logger.Info("failed to run migrations",
 			zap.String("error message", err.Error()),
 		)
 	} else {
-		app.Logger.Info("Migrations completed successfully")
+		logger.Info("Migrations completed successfully")
 	}
 
 	return db, nil

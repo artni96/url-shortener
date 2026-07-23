@@ -15,7 +15,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/artni96/url-shortener/internal/config"
-	"github.com/artni96/url-shortener/internal/config/db"
 	"github.com/artni96/url-shortener/internal/model"
 	"github.com/artni96/url-shortener/internal/repository/urls"
 	"github.com/artni96/url-shortener/internal/repository/users"
@@ -37,28 +36,28 @@ func URLTestBenchHandler(b *testing.B) *URLHandler {
 		SecretKey:       "dontshareme",
 	}
 
-	app := config.App{
-		DB:     nil,
-		Cfg:    &cfg,
-		Logger: testLogger,
-	}
+	//app := config.App{
+	//	DB:     nil,
+	//	Cfg:    &cfg,
+	//	Logger: testLogger,
+	//}
 
-	testDB, err := db.InitDBConnection(ctx, &app)
-	if err == nil {
-		app.DB = testDB
-	}
+	//testDB, err := db.InitDBConnection(ctx, &cfg, testLogger)
+	//if err == nil {
+	//	app.DB = testDB
+	//}
 
-	urlInMemoryRepository, err := urls.NewInMemoryURLRepository(&app)
+	urlInMemoryRepository, err := urls.NewInMemoryURLRepository(&cfg, testLogger)
 	if err != nil {
 		b.Fatal(err)
 	}
-	userInMemoryRepository, err := users.NewInMemoryUserRepository(&app)
+	userInMemoryRepository, err := users.NewInMemoryUserRepository(&cfg, testLogger)
 	if err != nil {
 		b.Fatal(err)
 	}
-	urlService := service.NewURLService(nil, urlInMemoryRepository, &app)
-	userService := service.NewUserService(nil, userInMemoryRepository, &app)
-	h := NewURLHandler(&ctx, &app, urlService, userService, &cfg)
+	urlService := service.NewURLService(nil, urlInMemoryRepository, &cfg, testLogger)
+	userService := service.NewUserService(nil, userInMemoryRepository, &cfg, testLogger)
+	h := NewURLHandler(&ctx, &cfg, testLogger, urlService, userService, nil)
 
 	return h
 }

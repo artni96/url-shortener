@@ -416,16 +416,16 @@ func (repo *InMemoryURLRepository) uploadInMemoryStorage(filepath string) error 
 }
 
 // NewInMemoryURLRepository initializes a new InMemoryURLRepository.
-func NewInMemoryURLRepository(app *config.App) (*InMemoryURLRepository, error) {
+func NewInMemoryURLRepository(cfg *config.Config, logger *zap.Logger) (*InMemoryURLRepository, error) {
 	repo := InMemoryURLRepository{
 		urls:   make(map[string]model.URLNestedData),
-		logger: app.Logger,
+		logger: logger,
 	}
 
-	err := repo.uploadInMemoryStorage(app.Cfg.FileStoragePath)
+	err := repo.uploadInMemoryStorage(cfg.FileStoragePath)
 	if err != nil {
 		repo.logger.Info("could not upload data from the file",
-			zap.String("filepath", app.Cfg.FileStoragePath),
+			zap.String("filepath", cfg.FileStoragePath),
 			zap.String("error", err.Error()))
 		return nil, fmt.Errorf("could not upload data from the file: %w", err)
 	}
