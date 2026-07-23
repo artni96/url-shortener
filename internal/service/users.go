@@ -29,7 +29,8 @@ type UserServiceInterface interface {
 type UserService struct {
 	dbRepository       users.DBUserRepositoryInterface
 	inMemoryRepository users.InMemoryUserRepositoryInterface
-	app                *config.App
+	cfg                *config.Config
+	logger             *zap.Logger
 }
 
 // Create saves a new User entity.
@@ -43,15 +44,15 @@ func (s *UserService) Create(ctx context.Context, ip string) (model.User, error)
 		user, err = s.inMemoryRepository.Create(ip)
 	}
 	if err != nil {
-		s.app.Logger.Info("failed to create user", zap.Error(err))
+		s.logger.Info("failed to create user", zap.Error(err))
 		responseUser.ID = -1
 		return responseUser, err
 	}
-	if s.dbRepository == nil && s.app.Cfg.FileStoragePath != "" {
-		fileWriter, err := users.NewWriter(s.app.Cfg.FileStoragePath)
+	if s.dbRepository == nil && s.cfg.FileStoragePath != "" {
+		fileWriter, err := users.NewWriter(s.cfg.FileStoragePath)
 		if err != nil {
-			s.app.Logger.Error("could not create file writer",
-				zap.String("path", s.app.Cfg.FileStoragePath),
+			s.logger.Error("could not create file writer",
+				zap.String("path", s.cfg.FileStoragePath),
 				zap.String("error message", err.Error()),
 			)
 			responseUser.ID = -1
@@ -65,7 +66,7 @@ func (s *UserService) Create(ctx context.Context, ip string) (model.User, error)
 			return responseUser, fmt.Errorf("could not write entity to file: %w", err)
 		}
 	}
-	s.app.Logger.Debug("user successfully created", zap.Int("user id", user.ID))
+	s.logger.Debug("user successfully created", zap.Int("user id", user.ID))
 	responseUser.ID = user.ID
 	responseUser.IP = ip
 	return responseUser, nil
@@ -76,10 +77,10 @@ func (s *UserService) Login(userID int, cfg *config.Config) (string, error) {
 
 	token, err := s.BuildJWTString(userID, cfg)
 	if err != nil {
-		s.app.Logger.Info("failed to build token", zap.Error(err))
+		s.logger.Info("failed to build token", zap.Error(err))
 		return "", err
 	}
-	s.app.Logger.Debug("user successfully authenticated", zap.Int("userID", userID))
+	s.logger.Debug("user successfully authenticated", zap.Int("userID", userID))
 	return token, nil
 }
 
@@ -94,11 +95,16 @@ func (s *UserService) GetByIP(ctx context.Context, ip string) (int, error) {
 	}
 
 	if err != nil {
-		s.app.Logger.Info("failed to get user by ip", zap.String("ip", ip), zap.Error(err))
+		s.logger.Info("failed to get user by ip", zap.String("ip", ip), zap.Error(err))
 		return -1, err
 	}
-	s.app.Logger.Debug("user successfully retrieved", zap.Int("userID", userID))
+	s.logger.Debug("user successfully retrieved", zap.Int("userID", userID))
 	return userID, nil
+}
+
+// GetStats provides the number of unique users in the in-memory storage via the in-memory repository.
+func (s *UserService) GetStats() int64 {
+	return s.inMemoryRepository.GetStats()
 }
 
 // Claims provides claims for user jwt token.
@@ -142,10 +148,11 @@ func GetUserID(tokenString string, cfg *config.Config) int {
 }
 
 // NewUserService initializes a new NewUserService.
-func NewUserService(dbRepository users.DBUserRepositoryInterface, inMemoryRepository users.InMemoryUserRepositoryInterface, app *config.App) *UserService {
+func NewUserService(dbRepository users.DBUserRepositoryInterface, inMemoryRepository users.InMemoryUserRepositoryInterface, cfg *config.Config, logger *zap.Logger) *UserService {
 	return &UserService{
 		dbRepository:       dbRepository,
 		inMemoryRepository: inMemoryRepository,
-		app:                app,
+		cfg:                cfg,
+		logger:             logger,
 	}
 }

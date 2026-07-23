@@ -32,6 +32,8 @@ type InMemoryURLRepositoryInterface interface {
 	Delete(shortURL string) error
 	// BulkDelete removes several URL entities by one commit.
 	BulkDelete(urls []model.URLDelete) ([]error, error)
+	// GetStats provides the number of unique urls in the in-memory storage.
+	GetStats() int64
 
 	// IsURLListUnique checks whether the whole list of generated short URL values is unique.
 	IsURLListUnique(shortURLList []string) (bool, error)
@@ -212,8 +214,12 @@ func (repo *InMemoryURLRepository) BulkDelete(urls []model.URLDelete) ([]error, 
 			repo.urls[url.ShortURL] = urlData
 		}
 	}
-
 	return errs, nil
+}
+
+// GetStats provides the number of unique urls in the in-memory storage.
+func (repo *InMemoryURLRepository) GetStats() int64 {
+	return int64(len(repo.urls))
 }
 
 // IsURLListUnique checks whether the whole list of generated short URL values is unique.
@@ -410,16 +416,16 @@ func (repo *InMemoryURLRepository) uploadInMemoryStorage(filepath string) error 
 }
 
 // NewInMemoryURLRepository initializes a new InMemoryURLRepository.
-func NewInMemoryURLRepository(app *config.App) (*InMemoryURLRepository, error) {
+func NewInMemoryURLRepository(cfg *config.Config, logger *zap.Logger) (*InMemoryURLRepository, error) {
 	repo := InMemoryURLRepository{
 		urls:   make(map[string]model.URLNestedData),
-		logger: app.Logger,
+		logger: logger,
 	}
 
-	err := repo.uploadInMemoryStorage(app.Cfg.FileStoragePath)
+	err := repo.uploadInMemoryStorage(cfg.FileStoragePath)
 	if err != nil {
 		repo.logger.Info("could not upload data from the file",
-			zap.String("filepath", app.Cfg.FileStoragePath),
+			zap.String("filepath", cfg.FileStoragePath),
 			zap.String("error", err.Error()))
 		return nil, fmt.Errorf("could not upload data from the file: %w", err)
 	}

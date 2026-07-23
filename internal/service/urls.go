@@ -35,13 +35,16 @@ type URLServiceInterface interface {
 	Delete(ctx context.Context, urlID string) error
 	// BulkDelete removes several URL entities by one commit.
 	BulkDelete(ctx context.Context, urls []model.URLDelete) error
+	// GetStats provides the number of unique urls in the in-memory storage via the in-memory repository.
+	GetStats() int64
 }
 
 // URLService implements the interaction with URL data through DB or/else a file.
 type URLService struct {
 	dbRepository       urlrepo.DBURLRepositoryInterface
 	inMemoryRepository urlrepo.InMemoryURLRepositoryInterface
-	app                *config.App
+	cfg                *config.Config
+	logger             *zap.Logger
 }
 
 // GetList returns the list of all URL entities.
@@ -117,7 +120,7 @@ func (s *URLService) Create(ctx context.Context, requestEntity model.URLCreateRe
 		var err error
 		shortURL, err := utility.GenerateShortURL(10)
 		if err != nil {
-			s.app.Logger.Info(
+			s.logger.Info(
 				"urlID creation",
 				zap.Int("attempt №", i),
 			)
@@ -138,20 +141,20 @@ func (s *URLService) Create(ctx context.Context, requestEntity model.URLCreateRe
 		if err != nil {
 			if errors.Is(err, urlrepo.ErrOriginalURLAlreadyExists) {
 
-				s.app.Logger.Info("original url already exists",
+				s.logger.Info("original url already exists",
 					zap.String("originalURL", requestEntity.OriginalURL),
 				)
 
 				return fmt.Sprintf("%s/%s", responseDomain, responseEntity.ShortURL), err
 			}
 			if errors.Is(err, urlrepo.ErrShortURLAlreadyExists) {
-				s.app.Logger.Info(
+				s.logger.Info(
 					"shortURL creation",
 					zap.Int("attempt №", i),
 				)
 				continue
 			} else {
-				s.app.Logger.Error(
+				s.logger.Error(
 					"could not manage to create a short url for ",
 					zap.String("url", requestEntity.OriginalURL),
 				)
@@ -159,11 +162,11 @@ func (s *URLService) Create(ctx context.Context, requestEntity model.URLCreateRe
 			}
 		}
 
-		if s.dbRepository == nil && s.app.Cfg.FileStoragePath != "" {
-			fileWriter, err := urlrepo.NewWriter(s.app.Cfg.FileStoragePath)
+		if s.dbRepository == nil && s.cfg.FileStoragePath != "" {
+			fileWriter, err := urlrepo.NewWriter(s.cfg.FileStoragePath)
 			if err != nil {
-				s.app.Logger.Error("could not create file writer",
-					zap.String("path", s.app.Cfg.FileStoragePath),
+				s.logger.Error("could not create file writer",
+					zap.String("path", s.cfg.FileStoragePath),
 					zap.String("error message", err.Error()),
 				)
 				return "", err
@@ -230,11 +233,11 @@ func (s *URLService) BulkCreate(ctx context.Context, urls []model.URLBulkCreateR
 		return nil, fmt.Errorf("%w", err)
 	}
 
-	if s.dbRepository == nil && s.app.Cfg.FileStoragePath != "" {
-		fileWriter, err := urlrepo.NewWriter(s.app.Cfg.FileStoragePath)
+	if s.dbRepository == nil && s.cfg.FileStoragePath != "" {
+		fileWriter, err := urlrepo.NewWriter(s.cfg.FileStoragePath)
 		if err != nil {
-			s.app.Logger.Error("could not create file writer",
-				zap.String("path", s.app.Cfg.FileStoragePath),
+			s.logger.Error("could not create file writer",
+				zap.String("path", s.cfg.FileStoragePath),
 				zap.String("error message", err.Error()),
 			)
 			return []model.URLBulkCreateResponse{}, fmt.Errorf("%w", err)
@@ -331,11 +334,11 @@ func (s *URLService) BulkDelete(ctx context.Context, urls []model.URLDelete) err
 	}
 
 	if err != nil {
-		s.app.Logger.Error("failed to bulk delete urls")
+		s.logger.Error("failed to bulk delete urls")
 		return err
 	}
 	for _, e := range errs {
-		s.app.Logger.Info("failed to delete url", zap.Error(e))
+		s.logger.Info("failed to delete url", zap.Error(e))
 	}
 
 	err = BulkFileUpdate(s)
@@ -345,9 +348,14 @@ func (s *URLService) BulkDelete(ctx context.Context, urls []model.URLDelete) err
 	return nil
 }
 
+// GetStats provides the number of unique urls in the in-memory storage via the in-memory repository.
+func (s *URLService) GetStats() int64 {
+	return s.inMemoryRepository.GetStats()
+}
+
 // BulkFileUpdate updates the file with new data (users and urls).
 func BulkFileUpdate(s *URLService) error {
-	filepath := s.app.Cfg.FileStoragePath
+	filepath := s.cfg.FileStoragePath
 
 	if s.dbRepository == nil && filepath != "" {
 		fileReader, err := usersrepo.NewFileScanner(filepath)
@@ -357,18 +365,18 @@ func BulkFileUpdate(s *URLService) error {
 		defer func(fileReader *usersrepo.FileScanner) {
 			err = fileReader.Close()
 			if err != nil {
-				s.app.Logger.Info("could not close file reader", zap.String("filepath", filepath))
+				s.logger.Info("could not close file reader", zap.String("filepath", filepath))
 			}
 		}(fileReader)
 
 		if err != nil {
-			s.app.Logger.Info("could not initialize NewFileScanner",
+			s.logger.Info("could not initialize NewFileScanner",
 				zap.String("error", err.Error()))
 			return nil
 		}
 		usersForFile, err := fileReader.CollectData()
 		if err != nil {
-			s.app.Logger.Info("could not collect data from file",
+			s.logger.Info("could not collect data from file",
 				zap.String("filepath", filepath),
 				zap.String("error", err.Error()))
 			return fmt.Errorf("could not collect data from file: %w", err)
@@ -380,7 +388,7 @@ func BulkFileUpdate(s *URLService) error {
 		}
 		urlsFileWriter, err := urlrepo.NewWriter(filepath)
 		if err != nil {
-			s.app.Logger.Error("could not create file writer",
+			s.logger.Error("could not create file writer",
 				zap.String("path", filepath),
 				zap.String("error message", err.Error()),
 			)
@@ -394,7 +402,7 @@ func BulkFileUpdate(s *URLService) error {
 
 		usersFileWriter, err := usersrepo.NewWriter(filepath)
 		if err != nil {
-			s.app.Logger.Error("could not create file writer",
+			s.logger.Error("could not create file writer",
 				zap.String("path", filepath),
 				zap.String("error message", err.Error()),
 			)
@@ -415,9 +423,10 @@ func BulkFileUpdate(s *URLService) error {
 func NewURLService(
 	dbRepository urlrepo.DBURLRepositoryInterface,
 	inMemoryRepository urlrepo.InMemoryURLRepositoryInterface,
-	app *config.App,
+	cfg *config.Config,
+	logger *zap.Logger,
 ) *URLService {
 	return &URLService{
-		dbRepository: dbRepository, inMemoryRepository: inMemoryRepository, app: app,
+		dbRepository: dbRepository, inMemoryRepository: inMemoryRepository, cfg: cfg, logger: logger,
 	}
 }

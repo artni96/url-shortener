@@ -7,7 +7,6 @@ import (
 	"github.com/jmoiron/sqlx"
 	"go.uber.org/zap"
 
-	"github.com/artni96/url-shortener/internal/config"
 	"github.com/artni96/url-shortener/internal/model"
 )
 
@@ -56,9 +55,9 @@ func (repo *DBUserRepository) GetByIP(ctx context.Context, ip string) (int, erro
 }
 
 // NewUserDBRepository initializes a new DBUserRepository.
-func NewUserDBRepository(app *config.App) (*DBUserRepository, error) {
+func NewUserDBRepository(db *sqlx.DB, logger *zap.Logger) (*DBUserRepository, error) {
 	return &DBUserRepository{
-		db:     app.DB,
-		logger: app.Logger,
+		db:     db,
+		logger: logger,
 	}, nil
 }

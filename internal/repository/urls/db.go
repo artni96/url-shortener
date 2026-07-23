@@ -10,7 +10,6 @@ import (
 	"github.com/jmoiron/sqlx"
 	"go.uber.org/zap"
 
-	"github.com/artni96/url-shortener/internal/config"
 	"github.com/artni96/url-shortener/internal/model"
 )
 
@@ -114,7 +113,7 @@ func (repo *DBURLRepository) BulkCreate(ctx context.Context, urls []model.URLBul
 		}
 		return nil, fmt.Errorf("failed to bulk create: %w", err)
 	}
-	if err := tx.Commit(); err != nil {
+	if err = tx.Commit(); err != nil {
 		return nil, fmt.Errorf("failed to commit bulk create: %w", err)
 	}
 	return result, nil
@@ -273,9 +272,9 @@ func (repo *DBURLRepository) IsURLListUnique(ctx context.Context, shortURLList [
 }
 
 // NewDBURLRepository returns a new DBURLRepository.
-func NewDBURLRepository(app *config.App) (*DBURLRepository, error) {
+func NewDBURLRepository(db *sqlx.DB, logger *zap.Logger) (*DBURLRepository, error) {
 	return &DBURLRepository{
-		db:     app.DB,
-		logger: app.Logger,
+		db:     db,
+		logger: logger,
 	}, nil
 }

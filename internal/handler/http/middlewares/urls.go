@@ -30,9 +30,7 @@ func PanicRecoverer(logger *zap.Logger) func(http.Handler) http.Handler {
 					return
 				}
 			}()
-
 			next.ServeHTTP(w, r)
-
 		}
 		return http.HandlerFunc(fn)
 	}
