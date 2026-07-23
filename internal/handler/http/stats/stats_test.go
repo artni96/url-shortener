@@ -84,7 +84,7 @@ func TestGetStats(t *testing.T) {
 
 	urlService, userService, statsService := testServices(app, t)
 
-	h := NewStatsHandler(ctx, app.Logger, statsService)
+	h := NewStatsHandler(app.Logger, statsService)
 
 	type want struct {
 		message string

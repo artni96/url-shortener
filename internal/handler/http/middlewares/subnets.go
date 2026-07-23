@@ -15,21 +15,26 @@ func CheckIP(logger *zap.Logger, appSubnet string) func(http.Handler) http.Handl
 			w.Header().Set("Content-Type", "application/json")
 			if strIP == "" {
 				w.WriteHeader(http.StatusForbidden)
+				return
 			}
 			ip := net.ParseIP(strIP)
 			if ip == nil {
 				w.WriteHeader(http.StatusForbidden)
+				return
 			}
 
 			_, subnet, err := net.ParseCIDR(appSubnet)
 			if err != nil {
 				logger.Error("Error parsing CIDR", zap.Error(err))
 				w.WriteHeader(http.StatusForbidden)
+				return
 			}
 			if subnet.Contains(ip) {
 				next.ServeHTTP(w, r)
+				return
 			}
 			w.WriteHeader(http.StatusForbidden)
+			return
 		}
 		return http.HandlerFunc(fn)
 	}

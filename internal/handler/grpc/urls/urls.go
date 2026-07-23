@@ -2,17 +2,19 @@ package urls
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	pb "github.com/artni96/url-shortener/api/proto"
 	"github.com/artni96/url-shortener/internal/config"
+	"github.com/artni96/url-shortener/internal/handler/grpc/interceptors"
 	"github.com/artni96/url-shortener/internal/model"
+	"github.com/artni96/url-shortener/internal/repository/urls"
 	"github.com/artni96/url-shortener/internal/service"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 // GRPCServerHandler is an entrypoint to the gRPC server services.
@@ -23,22 +25,29 @@ type GRPCServerHandler struct {
 	App         *config.App
 }
 
+// ExpandURL returns an original URL by its short url.
 func (s *GRPCServerHandler) ExpandURL(ctx context.Context, req *pb.URLExpandRequest) (*pb.URLExpandResponse, error) {
 	var response pb.URLExpandResponse
 	shortURL := req.GetId()
 	originalURL, err := s.URLService.GetByShortURL(ctx, shortURL)
 	if err != nil {
+		if errors.Is(err, urls.ErrURLNotFound) {
+			return nil, status.Errorf(codes.NotFound, "short url not found")
+		}
 		return nil, err
 	}
 	response.SetResult(originalURL.OriginalURL)
 	return &response, nil
 }
 
+// ShortenURL creates a new URL entity in the storage.
 func (s *GRPCServerHandler) ShortenURL(ctx context.Context, req *pb.URLShortenRequest) (*pb.URLShortenResponse, error) {
 	var response pb.URLShortenResponse
 
-	strUserID := ctx.Value("user_id")
-	userID := strUserID.(int)
+	userID, ok := interceptors.GetUserIDFromContext(ctx)
+	if !ok {
+		return nil, status.Error(codes.Internal, "failed to get user ID")
+	}
 
 	requestEntity := model.URLCreateRequest{
 		OriginalURL: req.GetUrl(),
@@ -63,7 +72,8 @@ func (s *GRPCServerHandler) ShortenURL(ctx context.Context, req *pb.URLShortenRe
 	return &response, nil
 }
 
-func (s *GRPCServerHandler) ListUserURLs(ctx context.Context, empty *emptypb.Empty) (*pb.UserURLsResponse, error) {
+// ListUserURLs returns URL entities created by a user.
+func (s *GRPCServerHandler) ListUserURLs(ctx context.Context, req *pb.UserURLsRequest) (*pb.UserURLsResponse, error) {
 	var response pb.UserURLsResponse
 
 	strUserID := ctx.Value("user_id")
@@ -76,7 +86,7 @@ func (s *GRPCServerHandler) ListUserURLs(ctx context.Context, empty *emptypb.Emp
 	var pbURLs []*pb.URLData
 	for _, url := range userURLs {
 		pbURL := pb.URLData{}
-		pbURL.SetShortUrl(url.OriginalURL)
+		pbURL.SetShortUrl(url.ShortURL)
 		pbURL.SetOriginalUrl(url.OriginalURL)
 		pbURLs = append(pbURLs, &pbURL)
 	}
@@ -84,6 +94,7 @@ func (s *GRPCServerHandler) ListUserURLs(ctx context.Context, empty *emptypb.Emp
 	return &response, nil
 }
 
+// Login allows a user to authorize by their IP by returning a jwt token.
 func (s *GRPCServerHandler) Login(ctx context.Context, req *pb.LoginRequest) (*pb.LoginResponse, error) {
 	response := &pb.LoginResponse{}
 	peers, ok := peer.FromContext(ctx)

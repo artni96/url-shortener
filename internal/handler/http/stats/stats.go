@@ -1,7 +1,6 @@
 package stats
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -17,31 +16,34 @@ import (
 
 type StatsHandler struct {
 	logger  *zap.Logger
-	ctx     *context.Context
 	service service.StatsServiceInterface
 }
 
-func NewStatsHandler(ctx context.Context, logger *zap.Logger, service service.StatsServiceInterface) *StatsHandler {
-	return &StatsHandler{logger: logger, ctx: &ctx, service: service}
+func NewStatsHandler(logger *zap.Logger, service service.StatsServiceInterface) *StatsHandler {
+	return &StatsHandler{logger: logger, service: service}
 }
 
 func (s *StatsHandler) GetStatsHandler(w http.ResponseWriter, r *http.Request) {
-	stats, err := s.service.Get(*s.ctx)
+	w.Header().Set("Content-Type", "application/json")
+	stats, err := s.service.Get(r.Context())
 	if err != nil {
 		s.logger.Error("failed to get stats", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
+
 	response, err := json.Marshal(stats)
 	if err != nil {
 		s.logger.Error("failed to marshal", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
-	w.Header().Set("Content-Type", "application/json")
+
 	w.WriteHeader(http.StatusOK)
 	w.Write(response)
 }
 
-func StatsRouter(ctx context.Context, app *config.App, service service.StatsServiceInterface, trustedSubnet string) chi.Router {
+func StatsRouter(app *config.App, service service.StatsServiceInterface, trustedSubnet string) chi.Router {
 	r := chi.NewRouter()
 
 	r.Use(middlewares2.PanicRecoverer(app.Logger))
@@ -50,7 +52,7 @@ func StatsRouter(ctx context.Context, app *config.App, service service.StatsServ
 	r.Use(logger2.RequestLoggerMiddleware(app.Logger))
 	r.Use(config.GzipMiddleware)
 
-	urlHandler := NewStatsHandler(ctx, app.Logger, service)
+	urlHandler := NewStatsHandler(app.Logger, service)
 
 	r.Route("/", func(r chi.Router) {
 		r.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {

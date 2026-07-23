@@ -20,19 +20,30 @@ type DBStatsRepository struct {
 }
 
 func (repo *DBStatsRepository) Get(ctx context.Context) (model.StatsResponse, error) {
+	tx, err := repo.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return model.StatsResponse{}, fmt.Errorf("failed to start a transaction for getting stats: %w", err)
+	}
+	defer tx.Rollback()
+
 	var urlsAmount int64
 	urlsAmountQuery := "SELECT count(*) FROM urls"
-	err := repo.db.GetContext(ctx, &urlsAmount, urlsAmountQuery)
+	err = tx.GetContext(ctx, &urlsAmount, urlsAmountQuery)
 	if err != nil {
 		return model.StatsResponse{}, fmt.Errorf("failed to get urls amount: %w", err)
 	}
 
 	var usersAmount int64
 	usersAmountQuery := "SELECT count(*) FROM users"
-	err = repo.db.GetContext(ctx, &usersAmount, usersAmountQuery)
+	err = tx.GetContext(ctx, &usersAmount, usersAmountQuery)
 	if err != nil {
 		return model.StatsResponse{}, fmt.Errorf("failed to get users amount: %w", err)
 	}
+
+	if err = tx.Commit(); err != nil {
+		return model.StatsResponse{}, fmt.Errorf("failed to finish transaction: %w", err)
+	}
+
 	return model.StatsResponse{URLs: urlsAmount, Users: usersAmount}, nil
 }
 
